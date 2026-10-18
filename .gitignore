@@ -17,5 +17,7 @@ __pycache__/
 # personal study files (stay local)
 VIVA.md
 OUTLINE.md
+STUDY_GUIDE.md
+CODE_WALKTHROUGH.md
 
 .DS_Store

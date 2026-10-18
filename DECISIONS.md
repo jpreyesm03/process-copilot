@@ -59,3 +59,10 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 **Evidence:** values look like `2018-01-02T12:53:00.000Z`: ISO 8601, the `Z` means UTC, but pandas reads them as strings.
 **Choice:** parse to datetime and keep UTC. Durations are unaffected. Hour-of-day analyses must convert to Europe/Amsterdam first (an event at 23:00 UTC is 00:00 or 01:00 in the Netherlands).
 **Finding:** supplier-side events (`Vendor creates invoice`, `Vendor creates debit memo`) are always at 21:59 or 22:59 UTC, i.e. midnight in Amsterdam (summer/winter time). They carry a **date only**, stored as local midnight. Never analyse their time of day.
+## D9 · Ambiguous questions: assume the business reading, say so, still give the number (2026-10-18)
+**Constraint:** C3 trust and C5 (Excel/SQL users who want a figure they can adjust, not a quiz back).
+**Evidence:** "lines with goods and invoice but never paid" read literally gives 27,570 lines / €102.6M; 23,237 of them started from Oct 2018 (not due yet at extraction) and 31 were deleted. The business reading (due, not deleted) is 4,302 lines / €16.3M, 6× less money.
+**Options:** (a) ask a clarifying question and give no number · (b) answer the most business-relevant reading, state the assumptions explicitly, suggest questions to confirm · (c) answer every reading side by side.
+**Choice:** (b). The API has no memory, so (a) costs the user a second round trip; (c) gets noisy with 3+ readings. A number with its assumptions lets the user correct for factors they know and we don't.
+**Graded in evals:** the number must match the business-reading key, the answer must name its assumptions, and it must suggest at least one confirming question.
+**Would change if:** the API gets conversation memory, then asking first becomes cheap for high-stakes questions.

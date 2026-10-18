@@ -1,0 +1,238 @@
+# Golden set: 20 questions with known answers.
+#
+# Every key is computed by `key_sql` against the full warehouse (tests/test_golden_set.py re-runs them),
+# never by the model. Grading fields:
+#   numbers      values the answer must contain (relative tolerance `tol`, default 1%)
+#   mentions     strings the answer must contain (case-insensitive; 'a|b' = either)
+#   tool         a tool the agent must have called
+#   assume       ambiguous question: must state assumptions and suggest a confirming question (D9)
+#   refuse       unanswerable: must say the data can't answer and give no invented figure
+#   judge        rules checked by an LLM judge (case questions)
+
+# ---------- descriptive ----------
+[[q]]
+id = "desc_01"
+type = "descriptive"
+question = "How many order lines are there per document type?"
+key_sql = "SELECT document_type, count(*) FROM cases GROUP BY 1 ORDER BY 2 DESC"
+numbers = [248755, 1539, 1440]
+
+[[q]]
+id = "desc_02"
+type = "descriptive"
+question = "What is the total ordered value across all order lines, in euros?"
+key_sql = "SELECT round(sum(value_eur) / 1e6, 1) FROM cases"
+numbers = [996.8]
+tol = 0.002
+
+[[q]]
+id = "desc_03"
+type = "descriptive"
+question = "Which spend area has the most order lines, and how many?"
+key_sql = "SELECT spend_area, count(*) FROM cases GROUP BY 1 ORDER BY 2 DESC LIMIT 1"
+numbers = [109199]
+mentions = ["Packaging"]
+
+# ---------- time / bottlenecks ----------
+[[q]]
+id = "time_01"
+type = "time"
+question = "What is the median number of days from creating a purchase order item to its first goods receipt?"
+key_sql = """
+WITH f AS (
+  SELECT case_id,
+         min(ts) FILTER (WHERE activity = 'Create Purchase Order Item') AS created,
+         min(ts) FILTER (WHERE activity = 'Record Goods Receipt') AS received
+  FROM events WHERE is_canonical AND ts_status IN ('ok', 'repaired') GROUP BY 1)
+SELECT round(median(date_diff('second', created, received) / 86400.0), 1)
+FROM f WHERE received >= created"""
+numbers = [10.0]
+tol = 0.05
+
+[[q]]
+id = "time_02"
+type = "time"
+question = "Which item category takes longest from order to payment for first-time payments, and what is its median?"
+key_sql = """
+SELECT c.item_category, round(median(y.days), 1)
+FROM cycles y JOIN cases c USING (case_id)
+WHERE y.cycle_no = 1 AND y.is_closed GROUP BY 1 ORDER BY 2 DESC LIMIT 1"""
+numbers = [77.9]
+mentions = ["invoice after GR"]
+tol = 0.02
+
+[[q]]
+id = "time_03"
+type = "time"
+question = "For 2-way match lines, what is the median time from order to first payment?"
+key_sql = """
+SELECT round(median(y.days), 1)
+FROM cycles y JOIN cases c USING (case_id)
+WHERE y.cycle_no = 1 AND y.is_closed AND c.item_category = '2-way match'"""
+numbers = [39.7]
+tol = 0.02
+
+# ---------- cycles (our definitions, D4) ----------
+[[q]]
+id = "cyc_01"
+type = "cycles"
+question = "How many payment cycles are still open?"
+key_sql = "SELECT count(*) FROM cycles WHERE NOT is_closed"
+numbers = [70413]
+
+[[q]]
+id = "cyc_02"
+type = "cycles"
+question = "How many order lines were paid in more than one cycle?"
+key_sql = "SELECT count(*) FROM (SELECT case_id FROM cycles GROUP BY 1 HAVING count(*) > 1)"
+numbers = [8338]
+
+[[q]]
+id = "cyc_03"
+type = "cycles"
+question = "Which order line has the most payment cycles, and how many?"
+key_sql = "SELECT case_id, count(*) FROM cycles GROUP BY 1 ORDER BY 2 DESC LIMIT 1"
+numbers = [54]
+mentions = ["4507000440_00010"]
+
+# ---------- single line: why slow (labelled by JP, 2026-10-18) ----------
+# numbers = the main waits in days; bonus_numbers = peer medians (only gradable once the tool benchmarks);
+# judge = rules for the LLM judge; label = the full reference answer.
+
+[[q]]
+id = "case_01"
+type = "case"
+question = "Why did order line 4507000365_00010 take so long?"
+key_sql = """
+SELECT activity, round(date_diff('second', lag(ts) OVER (ORDER BY seq), ts) / 86400.0, 1) AS wait_days
+FROM events WHERE case_id = '4507000365_00010' AND is_canonical AND seq IS NOT NULL ORDER BY seq"""
+tool = "get_case_timeline"
+numbers = [40.0, 42.5]
+tol = 0.05
+mentions = ["payment block"]
+bonus_numbers = [98.7, 6.3, 21.5]
+judge = ["Does not blame delivery or the goods receipt (it took 0.4 days)", "Invents no cause the events do not show (e.g. a dispute, a holiday)"]
+label = """142 days vs a vendor median of 99 (94th pct): abnormal. Delivery was fast. Two abnormal waits: the payment block took 40 days to remove (vendor median 6.3, +34) and the invoice came 42.5 days after the order (median 21.5, +21). The last 58 days to payment are normal for this vendor but slow vs similar lines (74th pct): a vendor-level pattern."""
+
+[[q]]
+id = "case_02"
+type = "case"
+question = "Why did order line 4507000414_00010 take so long?"
+key_sql = """
+SELECT activity, round(date_diff('second', lag(ts) OVER (ORDER BY seq), ts) / 86400.0, 1) AS wait_days
+FROM events WHERE case_id = '4507000414_00010' AND is_canonical AND seq IS NOT NULL ORDER BY seq"""
+tool = "get_case_timeline"
+numbers = [86.7]
+tol = 0.05
+mentions = ["invoice"]
+bonus_numbers = [112.9, 7.6]
+judge = ["Names the gap between the vendor's invoice date and recording the invoice as the main delay", "Invents no cause the events do not show"]
+label = """122 days: normal for this vendor (59th pct), whose lines are slow in general (median 113 vs 80 for similar lines). One abnormal wait: the vendor's invoice was recorded 87 days after its invoice date (vendor median 7.6, 96th pct, +79). Fast handling afterwards (block removed in 1.6 days, paid 6 days later) hid most of that delay in the total."""
+
+[[q]]
+id = "case_03"
+type = "case"
+question = "Why did order line 4507000905_00050 take so long?"
+key_sql = """
+SELECT activity, round(date_diff('second', lag(ts) OVER (ORDER BY seq), ts) / 86400.0, 1) AS wait_days
+FROM events WHERE case_id = '4507000905_00050' AND is_canonical AND seq IS NOT NULL ORDER BY seq"""
+tool = "get_case_timeline"
+numbers = [113.1]
+tol = 0.05
+mentions = ["goods receipt", "invoice"]
+bonus_numbers = [115.1, 35.0]
+judge = ["Names recording the invoice after goods receipt as the main delay", "Notes that payment after recording was fast (under a day)", "Invents no cause the events do not show"]
+label = """147 days vs a vendor median of 115 (93rd pct): abnormal. One step explains it: the invoice was recorded 113 days after the goods arrived (vendor median 35, 97th pct, +78), although the vendor's invoice was dated before the goods receipt. Once recorded, it was paid within a day (4th pct), so the delay was entirely in recording the invoice."""
+
+[[q]]
+id = "case_04"
+type = "case"
+question = "Why did order line 4507004456_00010 take so long?"
+key_sql = """
+SELECT activity, round(date_diff('second', lag(ts) OVER (ORDER BY seq), ts) / 86400.0, 1) AS wait_days
+FROM events WHERE case_id = '4507004456_00010' AND is_canonical AND seq IS NOT NULL ORDER BY seq"""
+tool = "get_case_timeline"
+numbers = [104.1]
+tol = 0.05
+mentions = ["Change Price|price change|price was changed"]
+bonus_numbers = [71.1, 6.9]
+judge = ["Names the price change after the invoice as the main delay", "Invents no cause the events do not show (e.g. calling it a price dispute)"]
+label = """136 days vs a vendor median of 71 (88th pct) and 80 for similar lines (93rd): abnormal. Ordering, delivery and invoice took 10 days. The delay is a price change, a rare event (5% of lines), made 104 days after the invoice was recorded (similar median 6.9, 95th pct). The payment block was removed 20 days later, and payment followed in 2 days. Price changes are a pattern at this vendor: 13% of its lines have one, and those take a median of 129 days vs 66 without."""
+
+# ---------- vendors / rankings ----------
+[[q]]
+id = "vend_01"
+type = "vendors"
+question = "Which vendor has the highest total ordered value, and how much?"
+key_sql = "SELECT vendor, round(sum(value_eur) / 1e6, 1) FROM cases GROUP BY 1 ORDER BY 2 DESC LIMIT 1"
+numbers = [32.1]
+mentions = ["vendorID_0104"]
+
+[[q]]
+id = "vend_02"
+type = "vendors"
+question = "Which vendor has the most order lines that needed a payment block removed?"
+key_sql = """
+SELECT c.vendor, count(DISTINCT e.case_id) FROM events e JOIN cases c USING (case_id)
+WHERE e.activity = 'Remove Payment Block' GROUP BY 1 ORDER BY 2 DESC LIMIT 1"""
+numbers = [6765]
+mentions = ["vendorID_0136"]
+
+[[q]]
+id = "vend_03"
+type = "vendors"
+question = "Among vendors with at least 1,000 order lines, which has the highest share of lines with a payment block removed?"
+key_sql = """
+SELECT vendor, round(avg(blocked::int) * 100, 1) FROM (
+  SELECT c.case_id, c.vendor, bool_or(e.activity = 'Remove Payment Block') AS blocked
+  FROM cases c JOIN events e USING (case_id) GROUP BY 1, 2)
+GROUP BY 1 HAVING count(*) >= 1000 ORDER BY 2 DESC LIMIT 1"""
+numbers = [65.3]
+mentions = ["vendorID_0278"]
+
+# ---------- unanswerable ----------
+[[q]]
+id = "unans_01"
+type = "unanswerable"
+question = "What share of deliveries arrived on time versus the promised delivery date?"
+refuse = true
+
+[[q]]
+id = "unans_02"
+type = "unanswerable"
+question = "What unit price per kilo did we pay vendorID_0104?"
+refuse = true
+
+# ---------- ambiguous (D9: business reading + assumptions + confirming question) ----------
+[[q]]
+id = "amb_01"
+type = "ambiguous"
+question = "How many order lines are unpaid, and how much money is that?"
+key_sql = """
+WITH l AS (
+  SELECT c.case_id, c.value_eur, c.start_ts,
+         bool_or(e.activity = 'Record Goods Receipt') AS gr,
+         bool_or(e.activity = 'Record Invoice Receipt') AS ir,
+         bool_or(e.activity = 'Clear Invoice') AS paid,
+         bool_or(e.activity = 'Delete Purchase Order Item') AS deleted
+  FROM cases c JOIN events e USING (case_id) GROUP BY 1, 2, 3)
+SELECT count(*), round(sum(value_eur) / 1e6, 1) FROM l
+WHERE gr AND ir AND NOT paid AND NOT deleted AND start_ts < '2018-10-01'"""
+numbers = [4302, 16.3]
+assume = true
+tol = 0.02
+
+[[q]]
+id = "amb_02"
+type = "ambiguous"
+question = "How long does it take us to pay an invoice?"
+key_sql = """
+WITH f AS (
+  SELECT case_id,
+         min(ts) FILTER (WHERE activity = 'Record Invoice Receipt') AS received,
+         min(ts) FILTER (WHERE activity = 'Clear Invoice') AS paid
+  FROM events WHERE is_canonical AND ts_status IN ('ok', 'repaired') GROUP BY 1)
+SELECT round(median(date_diff('second', received, paid) / 86400.0), 1) FROM f WHERE paid >= received"""
+numbers = [42.1]
+assume = true
+tol = 0.05
