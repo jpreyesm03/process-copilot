@@ -1,0 +1,21 @@
+# data and generated artifacts (never commit data or the DuckDB file)
+data/
+*.duckdb
+*.duckdb.wal
+traces/
+
+# python
+.venv
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# secrets
+.env
+
+# personal study files (stay local)
+VIVA.md
+OUTLINE.md
+
+.DS_Store
