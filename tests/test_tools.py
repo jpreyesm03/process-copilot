@@ -62,8 +62,18 @@ def test_timeline_of_a_plain_line(tools):
     assert out["ok"] and out["case"]["throughput_days"] == 86.27
     activities = [e[2] for e in out["events"]]
     assert activities[0] == "Create Purchase Order Item" and activities[-1] == "Clear Invoice"
-    assert out["events"][0][4] is None  # no wait before the first step
     assert len(out["cycles"]) == 1
+    first = out["waits"][0]
+    assert (first["from_seq"], first["to_seq"], first["from"]) == (1, 2, "Create Purchase Order Item")
+    assert len(out["waits"]) == len(out["events"]) - 1
+
+
+def test_longest_waits_are_benchmarked_against_peers(tools):
+    out = run(tools, "get_case_timeline", case_id="4507000229_00010")
+    benchmarked = [w for w in out["waits"] if "vendor_pctile" in w]
+    assert len(benchmarked) == 3
+    assert max(w["days"] for w in benchmarked) == max(w["days"] for w in out["waits"])
+    assert out["first_payment_vs_peers"]["days"] == out["cycles"][0]["days"]
 
 
 def test_long_timeline_is_truncated_with_a_summary(tools):

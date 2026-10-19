@@ -18,6 +18,7 @@ MAX_ROWS = 200          # rows a query may return (C2 cost: results go into the 
 ROWS_TO_MODEL = 30      # rows shown to the model; the full result is kept in the result store
 QUERY_TIMEOUT_S = 10    # C1 latency
 TIMELINE_MAX_EVENTS = 40
+BENCHMARKED_WAITS = 3  # the longest gaps of a line get peer medians and percentiles
 
 FORBIDDEN = re.compile(
     r"\b(insert|update|delete|merge|create|drop|alter|truncate|attach|detach|copy|export|import|"
@@ -85,6 +86,51 @@ class TimelineArgs(BaseModel):
     case_id: str = Field(..., description="Order line id, e.g. 4507000229_00010 (PO number + '_' + 5-digit item).")
 
 
+def _peer_stats(con: duckdb.DuckDBPyConnection, sql_from: str, value: float, keys: dict[str, Any]) -> dict[str, Any]:
+    """Median and percentile of `value` among peers with the same vendor, and with the same category + value band."""
+    row = con.execute(f"""
+        SELECT count(*) FILTER (WHERE vendor = $vendor),
+               round(median(days) FILTER (WHERE vendor = $vendor), 1),
+               round(100 * avg((days < $value)::int) FILTER (WHERE vendor = $vendor)),
+               count(*) FILTER (WHERE item_category = $category AND value_band = $band),
+               round(median(days) FILTER (WHERE item_category = $category AND value_band = $band), 1),
+               round(100 * avg((days < $value)::int) FILTER (WHERE item_category = $category AND value_band = $band))
+        {sql_from}""", {**keys, "value": value}).fetchone()
+    names = ["n_vendor", "vendor_median", "vendor_pctile", "n_similar", "similar_median", "similar_pctile"]
+    return dict(zip(names, row, strict=True))
+
+
+def _waits_vs_peers(con: duckdb.DuckDBPyConnection, case_id: str) -> list[dict[str, Any]]:
+    rows = con.execute("""
+        SELECT from_seq, to_seq, from_activity, to_activity, days, vendor, item_category, value_band
+        FROM waits WHERE case_id = ? ORDER BY to_seq""", [case_id]).fetchall()
+    out = [{"from_seq": r[0], "to_seq": r[1], "from": r[2], "to": r[3], "days": r[4]} for r in rows]
+    longest = sorted(range(len(rows)), key=lambda i: rows[i][4] or 0, reverse=True)[:BENCHMARKED_WAITS]
+    for i in longest:
+        r = rows[i]
+        keys = {"vendor": r[5], "category": r[6], "band": r[7], "from": r[2], "to": r[3]}
+        out[i] |= _peer_stats(con, "FROM waits WHERE from_activity = $from AND to_activity = $to", r[4], keys)
+    if len(out) > TIMELINE_MAX_EVENTS:  # long contracts: keep the benchmarked waits, then the first ones
+        keep = set(longest) | set(range(TIMELINE_MAX_EVENTS - len(longest)))
+        out = [w for i, w in enumerate(out) if i in keep]
+    return out
+
+
+def _first_payment_vs_peers(con: duckdb.DuckDBPyConnection, case_id: str) -> dict[str, Any] | None:
+    """Order to first payment (closed cycle 1) of this line vs the same peers. None if not paid yet."""
+    row = con.execute("""
+        SELECT y.days, w.vendor, w.item_category, w.value_band
+        FROM cycles y JOIN (SELECT DISTINCT case_id, vendor, item_category, value_band FROM waits) w USING (case_id)
+        WHERE y.case_id = ? AND y.cycle_no = 1 AND y.is_closed""", [case_id]).fetchone()
+    if row is None:
+        return None
+    keys = {"vendor": row[1], "category": row[2], "band": row[3]}
+    peers = """FROM (SELECT y.days, w.vendor, w.item_category, w.value_band FROM cycles y
+                     JOIN (SELECT DISTINCT case_id, vendor, item_category, value_band FROM waits) w USING (case_id)
+                     WHERE y.cycle_no = 1 AND y.is_closed)"""
+    return {"days": row[0], **_peer_stats(con, peers, row[0], keys)}
+
+
 def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
     def run_sql(query: str) -> dict[str, Any]:
         error = check_query(query)
@@ -117,10 +163,10 @@ def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
                      "start", "end", "throughput_days", "n_events"]
         events = con.execute("""
             SELECT e.seq, e.event_id, e.activity, strftime(e.ts, '%Y-%m-%d %H:%M') AS ts,
-                   round(date_diff('second', lag(e.ts) OVER (ORDER BY e.seq), e.ts) / 86400.0, 1) AS wait_days,
                    e.user_id, e.n_identical, e.ts_status
             FROM events e WHERE e.case_id = ? AND e.is_canonical ORDER BY e.seq""", [case_id]).fetchall()
-        event_cols = ["seq", "event_id", "activity", "ts", "wait_days", "user_id", "n_identical", "ts_status"]
+        event_cols = ["seq", "event_id", "activity", "ts", "user_id", "n_identical", "ts_status"]
+        waits = _waits_vs_peers(con, case_id)
         cycles = con.execute("""
             SELECT cycle_no, strftime(start_ts, '%Y-%m-%d'), strftime(end_ts, '%Y-%m-%d'), days, is_closed
             FROM cycles WHERE case_id = ? ORDER BY cycle_no""", [case_id]).fetchall()
@@ -142,8 +188,14 @@ def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
             "omitted_middle": omitted,
             "cycles": [{"cycle_no": c[0], "start": c[1], "end": c[2], "days": c[3], "closed": c[4]}
                        for c in cycles],
+            "waits": waits,
+            "first_payment_vs_peers": _first_payment_vs_peers(con, case_id),
             "note": "Canonical events only (identical copies collapsed, n_identical shows how many). "
-                    "wait_days = days since the previous step. Supplier events carry a date, not a real time.",
+                    "Each wait is the gap between two named steps (from -> to), not a property of either step. "
+                    f"The {BENCHMARKED_WAITS} longest waits are compared with the same gap at the same vendor and "
+                    "at similar lines (same item_category and value band, 5 equal-size bands by value): "
+                    "pctile = % of peers that waited less (50 typical, 90+ unusually slow); "
+                    "treat n under 30 as weak evidence. Supplier events carry a date, not a real time.",
         }
         result["_full"] = {**result, "events": [list(e) for e in events]}
         return result
@@ -161,7 +213,8 @@ def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
         "get_case_timeline": Tool(
             name="get_case_timeline",
             description=(
-                "Get one order line's ordered steps with waiting time between them, its attributes and its "
+                "Get one order line's ordered steps, the waits between them (the longest ones compared with "
+                "the same vendor and similar lines), its first payment time vs peers, its attributes and its "
                 "payment cycles. Use it to explain why a specific line was slow; cite seq/event_id as evidence."
             ),
             args_model=TimelineArgs, fn=get_case_timeline,

@@ -205,6 +205,27 @@ def build(csv_path: Path, db_path: Path) -> None:
         ORDER BY case_id, cycle_no
     """)
 
+    # one row per gap between consecutive trusted steps, with the keys of its peer groups (same vendor; same
+    # item category and value band), so a wait can be compared with the same gap elsewhere
+    con.execute("""
+        CREATE TABLE waits AS
+        WITH steps AS (
+            SELECT case_id, seq, activity, ts,
+                   lag(activity) OVER w AS from_activity, lag(seq) OVER w AS from_seq, lag(ts) OVER w AS from_ts
+            FROM events
+            WHERE is_canonical AND seq IS NOT NULL AND ts_status IN ('ok', 'repaired')
+            WINDOW w AS (PARTITION BY case_id ORDER BY seq)
+        ),
+        bands AS (SELECT case_id, vendor, item_category, ntile(5) OVER (ORDER BY value_eur, case_id) AS value_band
+                  FROM cases)
+        SELECT s.case_id, s.from_seq, s.seq AS to_seq, s.from_activity, s.activity AS to_activity,
+               round(date_diff('second', s.from_ts, s.ts) / 86400.0, 1) AS days,
+               b.vendor, b.item_category, b.value_band
+        FROM steps s JOIN bands b USING (case_id)
+        WHERE s.from_activity IS NOT NULL
+        ORDER BY s.case_id, s.seq
+    """)
+
     # data-quality report: every cleaning rule is counted, nothing is silently dropped
     con.execute("""
         CREATE TABLE dq_report AS
