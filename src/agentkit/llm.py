@@ -58,6 +58,8 @@ class LLMClient:
         for attempt in range(self.max_retries + 1):
             resp = self.http.post("/chat/completions", json=body)
             # provider hiccups and rate limits: back off and retry (tool errors are NOT retried here)
+            if resp.status_code == 429 and resp.headers.get("x-should-retry") == "false":
+                resp.raise_for_status()  # a daily quota, not a burst: fail now instead of waiting per call
             if resp.status_code in RETRY_STATUS and attempt < self.max_retries:
                 wait = min(float(resp.headers.get("retry-after", 2 ** attempt)), 60)
                 time.sleep(wait)
