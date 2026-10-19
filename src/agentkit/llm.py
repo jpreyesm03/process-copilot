@@ -34,6 +34,7 @@ class LLMResponse:
     tokens_out: int = 0
     latency_ms: int = 0
     raw_message: dict[str, Any] = field(default_factory=dict)  # appended back to the conversation as-is
+    cost_usd: float = 0.0  # list-price cost when the provider reports it (the claude CLI does)
 
 
 class LLMClient:

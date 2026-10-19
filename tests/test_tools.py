@@ -6,10 +6,15 @@ from process_copilot.tools import check_query, connect, make_tools
 
 
 @pytest.fixture(scope="module")
-def tools(db_path):
+def con(db_path):
     con = connect(db_path)
-    yield make_tools(con)
+    yield con
     con.close()
+
+
+@pytest.fixture(scope="module")
+def tools(con):
+    return make_tools(con)
 
 
 def run(tools, name, **args):
@@ -90,3 +95,8 @@ def test_timeline_errors_are_actionable(tools, case_id, hint):
 def test_bad_arguments_and_unknown_tools(tools):
     assert "Invalid arguments" in call_tool(tools, "run_sql", "{not json", ResultStore())["error"]
     assert "Unknown tool" in call_tool(tools, "delete_everything", {}, ResultStore())["error"]
+
+
+def test_timeline_v1_is_kept_for_reproducible_evals(con):
+    out = make_tools(con, "v1")["get_case_timeline"].fn(case_id="4507000229_00010")
+    assert "wait_days" in out["event_columns"] and "waits" not in out

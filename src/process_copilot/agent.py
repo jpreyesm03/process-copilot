@@ -4,14 +4,16 @@ Usage: python -m process_copilot.agent "Why did 4507000229_00010 take so long?"
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from agentkit.guard import ungrounded_numbers
 from agentkit.llm import LLMClient
+from agentkit.llm_cli import ClaudeCLIClient
 from agentkit.loop import AgentResult, run_agent
 from agentkit.trace import Tracer
-from process_copilot.tools import DEFAULT_DB, connect, make_tools
+from process_copilot.tools import DEFAULT_DB, TIMELINE_VERSION, connect, make_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 TRACES = ROOT / "traces" / "traces.duckdb"
@@ -121,9 +123,13 @@ BLOCKED_ANSWER = ("I could not verify every number in my answer against the purc
 SYSTEM_PROMPT = SYSTEM_PROMPTS[PROMPT_VERSION]
 
 
-def build_agent(db_path: Path = DEFAULT_DB):
+def build_agent(db_path: Path = DEFAULT_DB, provider: str | None = None, model: str | None = None,
+                timeline_version: str = TIMELINE_VERSION):
+    """Model from arguments or .env (LLM_PROVIDER, LLM_MODEL); 'claude-cli' runs Claude through the local CLI."""
     con = connect(db_path)
-    return LLMClient(), make_tools(con)
+    provider = provider or os.getenv("LLM_PROVIDER", "groq")
+    llm = ClaudeCLIClient(model) if provider == "claude-cli" else LLMClient(provider, model)
+    return llm, make_tools(con, timeline_version)
 
 
 def ask(question: str, *, llm=None, tools=None, trace_path: Path | None = None,

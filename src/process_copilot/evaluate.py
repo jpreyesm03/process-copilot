@@ -21,6 +21,7 @@ from typing import Any
 
 from agentkit import grounding
 from process_copilot.agent import PROMPT_VERSION, ROOT, SYSTEM_PROMPTS, ask, build_agent
+from process_copilot.tools import TIMELINE_VERSION
 
 GOLDEN = ROOT / "evals" / "golden_set.toml"
 RUNS = ROOT / "evals" / "runs"
@@ -59,16 +60,18 @@ def auto_grade(q: dict[str, Any], answer: str, tools_used: list[str], results: d
 
 
 def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROMPT_VERSION,
-        resume: Path | None = None) -> Path:
+        resume: Path | None = None, provider: str | None = None, model: str | None = None,
+        timeline: str = TIMELINE_VERSION) -> Path:
     questions = load_golden(only)
-    llm, tools = build_agent()
-    out_dir = resume or RUNS / f"{datetime.now():%Y-%m-%d_%H%M}_{prompt}_{llm.model.split('/')[-1]}"
+    llm, tools = build_agent(provider=provider, model=model, timeline_version=timeline)
+    out_dir = resume or RUNS / f"{datetime.now():%Y-%m-%d_%H%M}_{prompt}_tl{timeline}_{llm.model.split('/')[-1]}"
     out_dir.mkdir(parents=True, exist_ok=True)
     answers = out_dir / "answers.jsonl"
     rows = [json.loads(line) for line in answers.read_text().splitlines()] if answers.exists() else []
     done = {(r["id"], r["repeat"]) for r in rows}
     (out_dir / "meta.json").write_text(json.dumps(
-        {"model": llm.model, "provider": llm.provider, "prompt_version": prompt, "repeats": repeats,
+        {"model": llm.model, "provider": llm.provider, "prompt_version": prompt, "timeline_version": timeline,
+         "repeats": repeats,
          "questions": [q["id"] for q in questions], "started": out_dir.name}, indent=2))
     for q in questions:
         for i in range(1, repeats + 1):
@@ -83,6 +86,7 @@ def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROM
                 "answer": result.answer, "stop_reason": result.stop_reason, "tools": tools_used,
                 "steps": result.steps, "tokens": result.tokens_in + result.tokens_out,
                 "latency_ms": result.latency_ms - throttled, "throttled_ms": throttled, "run_id": result.run_id,
+                "cost_usd": result.cost_usd,
                 "auto": auto_grade(q, result.answer, tools_used, result.store.results, result.stop_reason),
                 "needs_judge": needs_judge(q), "blocked": result.blocked, "results": result.store.results,
             }
@@ -158,6 +162,7 @@ def report(out_dir: Path) -> str:
     lines = [
         f"# Eval run {out_dir.name}\n",
         f"Model `{meta['model']}` ({meta['provider']}) · prompt {meta['prompt_version']} · "
+        f"timeline {meta.get('timeline_version', 'v1')} · "
         f"{n_q} questions × {k} runs\n",
         "| Metric | Value |", "|---|---|",
         f"| **pass^{k}** (all {k} runs pass) | **{pct(pass_k, n_q)}** |",
@@ -167,6 +172,8 @@ def report(out_dir: Path) -> str:
         + (f", excluding {sum(r['throttled_ms'] for r in rows) / 1000:.0f} s of rate-limit waits |"
            if all("throttled_ms" in r for r in rows) else ", rate-limit waits included |"),
         f"| Median tokens per question | {sorted(r['tokens'] for r in rows)[len(rows) // 2]:,} |",
+        *([f"| Cost per question (list price) | median ${sorted(r['cost_usd'] for r in rows)[len(rows) // 2]:.4f}, "
+           f"total ${sum(r['cost_usd'] for r in rows):.2f} |"] if any(r.get("cost_usd") for r in rows) else []),
         "", "| Type | pass^k | pass@1 |", "|---|---|---|",
     ]
     splits: dict[str, list[str]] = {}
@@ -205,11 +212,15 @@ def main() -> None:
     r.add_argument("--pause", type=float, default=2.0, help="seconds between questions (rate limits)")
     r.add_argument("--prompt", default=PROMPT_VERSION, choices=sorted(SYSTEM_PROMPTS))
     r.add_argument("--resume", type=Path, default=None, help="run folder to complete after a crash")
+    r.add_argument("--provider", default=None, help="groq | gemini | openai | ollama | claude-cli (default: .env)")
+    r.add_argument("--model", default=None, help="e.g. openai/gpt-oss-120b, or haiku with claude-cli")
+    r.add_argument("--timeline", default=TIMELINE_VERSION, choices=["v1", "v2"], help="timeline tool version")
     rep = sub.add_parser("report")
     rep.add_argument("run_dir", type=Path)
     args = parser.parse_args()
     if args.cmd == "run":
-        out = run(args.repeats, args.only, args.pause, args.prompt, args.resume)
+        out = run(args.repeats, args.only, args.pause, args.prompt, args.resume, args.provider, args.model,
+                  args.timeline)
         print(report(out))
     else:
         print(report(args.run_dir))

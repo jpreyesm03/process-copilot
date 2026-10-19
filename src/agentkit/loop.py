@@ -25,6 +25,7 @@ class AgentResult:
     tokens_out: int = 0
     latency_ms: int = 0
     store: ResultStore = field(default_factory=ResultStore)
+    cost_usd: float = 0.0
     blocked: str | None = None  # set when a guard withheld the answer (the model's text stays in the trace)
 
 
@@ -52,6 +53,7 @@ def run_agent(question: str, *, llm, tools: dict[str, Tool], system_prompt: str,
         resp = llm.chat(messages, schemas)
         out.tokens_in += resp.tokens_in
         out.tokens_out += resp.tokens_out
+        out.cost_usd += resp.cost_usd
         tracer.step(run_id, step, "llm", tokens_in=resp.tokens_in, tokens_out=resp.tokens_out,
                     latency_ms=resp.latency_ms, content=resp.content)
 

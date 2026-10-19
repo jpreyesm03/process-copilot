@@ -131,7 +131,12 @@ def _first_payment_vs_peers(con: duckdb.DuckDBPyConnection, case_id: str) -> dic
     return {"days": row[0], **_peer_stats(con, peers, row[0], keys)}
 
 
-def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
+TIMELINE_VERSION = "v2"  # v1 (baseline): wait_days on each event row, no peers. Kept so eval runs are reproducible.
+
+
+def make_tools(con: duckdb.DuckDBPyConnection, timeline_version: str = TIMELINE_VERSION) -> dict[str, Tool]:
+    v1 = timeline_version == "v1"
+
     def run_sql(query: str) -> dict[str, Any]:
         error = check_query(query)
         if error:
@@ -161,12 +166,14 @@ def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
             return {"ok": False, "error": f"No order line {case_id}. Use run_sql to search cases by po or vendor."}
         case_cols = ["case_id", "document_type", "item_category", "vendor", "spend_area", "value_eur",
                      "start", "end", "throughput_days", "n_events"]
-        events = con.execute("""
-            SELECT e.seq, e.event_id, e.activity, strftime(e.ts, '%Y-%m-%d %H:%M') AS ts,
+        wait_col = ("round(date_diff('second', lag(e.ts) OVER (ORDER BY e.seq), e.ts) / 86400.0, 1) AS wait_days,"
+                    if v1 else "")
+        events = con.execute(f"""
+            SELECT e.seq, e.event_id, e.activity, strftime(e.ts, '%Y-%m-%d %H:%M') AS ts, {wait_col}
                    e.user_id, e.n_identical, e.ts_status
             FROM events e WHERE e.case_id = ? AND e.is_canonical ORDER BY e.seq""", [case_id]).fetchall()
-        event_cols = ["seq", "event_id", "activity", "ts", "user_id", "n_identical", "ts_status"]
-        waits = _waits_vs_peers(con, case_id)
+        event_cols = ["seq", "event_id", "activity", "ts", *(["wait_days"] if v1 else []),
+                      "user_id", "n_identical", "ts_status"]
         cycles = con.execute("""
             SELECT cycle_no, strftime(start_ts, '%Y-%m-%d'), strftime(end_ts, '%Y-%m-%d'), days, is_closed
             FROM cycles WHERE case_id = ? ORDER BY cycle_no""", [case_id]).fetchall()
@@ -188,8 +195,6 @@ def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
             "omitted_middle": omitted,
             "cycles": [{"cycle_no": c[0], "start": c[1], "end": c[2], "days": c[3], "closed": c[4]}
                        for c in cycles],
-            "waits": waits,
-            "first_payment_vs_peers": _first_payment_vs_peers(con, case_id),
             "note": "Canonical events only (identical copies collapsed, n_identical shows how many). "
                     "Each wait is the gap between two named steps (from -> to), not a property of either step. "
                     f"The {BENCHMARKED_WAITS} longest waits are compared with the same gap at the same vendor and "
@@ -197,6 +202,13 @@ def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
                     "pctile = % of peers that waited less (50 typical, 90+ unusually slow); "
                     "treat n under 30 as weak evidence. Supplier events carry a date, not a real time.",
         }
+        if v1:
+            result["note"] = ("Canonical events only (identical copies collapsed, n_identical shows how many). "
+                              "wait_days = days since the previous step. "
+                              "Supplier events carry a date, not a real time.")
+        else:
+            result["waits"] = _waits_vs_peers(con, case_id)
+            result["first_payment_vs_peers"] = _first_payment_vs_peers(con, case_id)
         result["_full"] = {**result, "events": [list(e) for e in events]}
         return result
 
@@ -213,6 +225,9 @@ def make_tools(con: duckdb.DuckDBPyConnection) -> dict[str, Tool]:
         "get_case_timeline": Tool(
             name="get_case_timeline",
             description=(
+                "Get one order line's ordered steps with waiting time between them, its attributes and its "
+                "payment cycles. Use it to explain why a specific line was slow; cite seq/event_id as evidence."
+                if v1 else
                 "Get one order line's ordered steps, the waits between them (the longest ones compared with "
                 "the same vendor and similar lines), its first payment time vs peers, its attributes and its "
                 "payment cycles. Use it to explain why a specific line was slow; cite seq/event_id as evidence."
