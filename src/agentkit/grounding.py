@@ -129,7 +129,8 @@ def check(answer: str, results: dict[str, Any], question: str = "") -> list[Numb
     """Classify every number in the answer against all tool results of the run. Numbers from the question may be
     repeated (grounded) but not computed with: arithmetic on user-supplied numbers is not an answer from the data."""
     pool = sorted(set(collect_values(results)))
-    echoed = [n.value for n in extract_numbers(question)]
+    # repeating the question is fine, including parts of an id it contains ("PO 4507000365" from 4507000365_00010)
+    echoed = [n.value for n in extract_numbers(question)] + [float(d) for d in re.findall(r"\d+", question)]
     numbers = extract_numbers(answer or "")
     for n in numbers:
         if any(_matches(n, v) for v in pool + echoed):

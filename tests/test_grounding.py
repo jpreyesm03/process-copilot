@@ -78,3 +78,9 @@ def test_column_total_is_grounded_but_a_wrong_sum_is_not():
 
 def test_bare_years_are_dates_not_quantities():
     assert extract_numbers("lines created late in 2018, before 2019") == []
+
+
+def test_parts_of_an_id_from_the_question_count_as_echoed():
+    question = "Why did 4507000365_00010 take so long?"
+    found = check("PO 4507000365, item 00010, took 42.5 days", RESULTS, question=question)
+    assert "ungrounded" not in {n.status for n in found if n.text != "42.5"}
