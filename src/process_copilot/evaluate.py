@@ -44,7 +44,8 @@ def auto_grade(q: dict[str, Any], answer: str, tools_used: list[str], results: d
     stated = grounding.extract_numbers(text)
     checks: dict[str, bool] = {"answered": stop_reason == "answered"}
     for expected in q.get("numbers", []):
-        tol = q.get("tol", 0.01) * abs(expected)
+        # counts must be exact (76,349 is not 76,316); other values allow the question's tolerance (default 1%)
+        tol = q.get("tol", 0 if float(expected).is_integer() else 0.01) * abs(expected)
         checks[f"number {expected:g}"] = any(abs(n.value - expected) <= max(tol, n.tol) or
                                               abs(n.value / 1e6 - expected) <= tol for n in stated)
     for words in q.get("mentions", []):

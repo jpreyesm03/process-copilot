@@ -26,6 +26,26 @@ Reports are re-graded with the current grader and keys, so older rows reflect th
 
 **How much to trust 29/29:** it is one run of 3 repetitions on 29 questions, 6 of them graded by reviewers from the same model family as the agent; the business readings were written from failures on the dev set (the 4 held-out questions guard against that, but 4 is few); tool calls are prompted, not native (D12); it is the configuration we iterated on. Next confirmations: re-run v3 on another day, add held-out questions, and run v3 on the paid API before publishing.
 
+## Overfitting check (2026-10-18, after choosing v3)
+
+Pass criterion set before running: at least 7 of 8 new questions in all 3 runs, and a second model in the same range.
+
+| Check | What it tests | Result |
+|---|---|---|
+| [8 new questions](runs/2026-10-18_1927_v3_tlv2_haiku/report.md), written from the data only by an independent author who never saw the prompt or the golden set; graded by a different reviewer model | overfitting to the questions | **6/8** with exact counts (7/8 with the old 1% count tolerance) |
+| [Sonnet as the agent](runs/2026-10-18_1924_v3_tlv2_sonnet/report.md), same prompt v3 + timeline v2, all 29 questions | overfitting to the model | **25/29** (dev 19/20), vs Haiku 28/29 |
+
+**Grader fix found by this check:** counts were accepted within 1%, so 76,349 passed for a key of 76,316. Integer keys are now exact unless a question sets its own tolerance; all runs were re-graded (Haiku v3 held-out 4/4 → 3/4).
+
+**What the misses are**
+- **One systematic definition slip (both models, 6 of the misses):** "orders placed in 2018" filtered on each line's first event (`start_ts`, which can be a requisition from late 2017) instead of the PO creation event: 76,280 POs vs 76,316 (0.05%). Not fixed in the prompt: fixing it now would tune on held-out questions.
+- **Precision:** whole calendar days instead of exact durations (11.0 vs 10.0), 1 run in 3.
+- **Question wording, not the agent:** ho_time ("lines where the invoice is recorded after the goods arrive") reads naturally as the category "3-way match, invoice after GR"; Sonnet took that reading in all 3 runs and stated it.
+- **Arithmetic in the model's head:** Sonnet mis-added the top-5 vendor total (120,444,110 for 132,444,110); the gate flagged it [unverified] (right).
+- **Not covered by any check:** a wrong statement in words ("it also has the most order lines") passes, because the gate only checks numbers.
+
+**Verdict:** scores on unseen questions (6-7/8) and with another model (25/29) are close to the dev score, and the misses are specific and explainable rather than broad, so the setup is not overfitted to the dev questions or to Haiku. The dev 20/20 is optimistic; the honest headline is "about 85-95% of questions right in all 3 runs, on questions it has never seen".
+
 ## Baseline failure taxonomy (17 failed runs)
 
 | # | Failure | Runs | Example | Root cause | Fix candidate |

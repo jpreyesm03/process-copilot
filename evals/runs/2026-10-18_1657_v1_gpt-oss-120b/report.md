@@ -10,7 +10,7 @@ Model `openai/gpt-oss-120b` (groq) · prompt v1 · timeline v1 · 20 questions �
 | Median latency | 10.2 s (max 30.2 s), rate-limit waits included |
 | Median tokens per question | 2,292 |
 | Peer benchmarks cited in slow-line answers | 7/27 (26%) |
-| Withheld by the output gate | 0 of 60 answers |
+| Flagged by the output gate | 0 of 60 answers |
 
 | Type | pass^k | pass@1 |
 |---|---|---|

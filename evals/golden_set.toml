@@ -345,7 +345,6 @@ key_sql = """
 SELECT count(DISTINCT c.po), count(*) FROM cases c
 WHERE c.case_id IN (SELECT case_id FROM events WHERE activity = 'Create Purchase Order Item' AND year(ts) = 2018)"""
 numbers = [76316, 251352]
-tol = 0.02
 
 [[q]]
 id = "h2_paid_share"

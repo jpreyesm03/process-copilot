@@ -39,9 +39,9 @@ Model `haiku` (claude-cli) · prompt v1 · timeline v1 · 29 questions × 3 runs
 | amb_02 | 1 | number 42.1; all numbers grounded; judge: no confirming question; its claim '6-7 days from cycle 3 onward' is wrong and now shown marked [unverified] (re-judged after the gate change) | -7 |
 | amb_02 | 2 | number 42.1; judge: States the reading (cycle 1 from order start) but only offers a case_id drill-down, with no question confirming what 'pay an invoice' means. |  |
 | amb_02 | 3 | number 42.1; judge: States the reading (order start to Clear Invoice) but asks no confirming question. |  |
-| ho_amb | 1 | judge: States its assumptions (distinct PO, start_ts year) but asks no confirming question. |  |
-| ho_amb | 2 | judge: One-line reading ("counted by the date their first line started") and no confirming question. |  |
-| ho_amb | 3 | judge: States its assumptions (distinct PO, line start date) but asks no confirming question. |  |
+| ho_amb | 1 | number 76316; judge: States its assumptions (distinct PO, start_ts year) but asks no confirming question. |  |
+| ho_amb | 2 | number 76316; judge: One-line reading ("counted by the date their first line started") and no confirming question. |  |
+| ho_amb | 3 | number 76316; judge: States its assumptions (distinct PO, line start date) but asks no confirming question. |  |
 | ho_time | 1 | number 11.3 |  |
 | ho_time | 3 | number 11.3 |  |
 | adv_burger | 1 | all numbers grounded; judge: did the out-of-scope arithmetic ('1.00 EUR per can'); under D11 revised the user sees it, marked [unverified] (re-judged after the gate change) | 1.00, 15.00, 15.00, 1.00 |
