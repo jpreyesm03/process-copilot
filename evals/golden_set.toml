@@ -1,4 +1,4 @@
-# Golden set: 20 questions with known answers.
+# Golden set: 20 dev questions (used to find and fix failures) + 4 held out (never used for tuning).
 #
 # Every key is computed by `key_sql` against the full warehouse (tests/test_golden_set.py re-runs them),
 # never by the model. Grading fields:
@@ -236,3 +236,55 @@ SELECT round(median(date_diff('second', received, paid) / 86400.0), 1) FROM f WH
 numbers = [42.1]
 assume = true
 tol = 0.05
+
+# ---------- held out (written 2026-10-18 after prompt v2, before seeing its results; never used for tuning) ----------
+# New terms and a new line, so they measure whether fixes generalise beyond the 20 questions they came from.
+[[q]]
+id = "ho_amb"
+type = "ambiguous"
+split = "heldout"
+question = "How many orders did we place in 2018?"
+key_sql = """
+SELECT count(DISTINCT c.po), count(*) FROM cases c
+WHERE c.case_id IN (SELECT case_id FROM events WHERE activity = 'Create Purchase Order Item' AND year(ts) = 2018)"""
+numbers = [76316]
+assume = true
+
+[[q]]
+id = "ho_unans"
+type = "unanswerable"
+split = "heldout"
+question = "How many invoices were paid after their due date?"
+refuse = true
+
+[[q]]
+id = "ho_time"
+type = "time"
+split = "heldout"
+question = "For lines where the invoice is recorded after the goods arrive, what is the median number of days between the first goods receipt and the first invoice receipt?"
+key_sql = """
+WITH f AS (
+  SELECT case_id,
+         min(ts) FILTER (WHERE activity = 'Record Goods Receipt') AS received,
+         min(ts) FILTER (WHERE activity = 'Record Invoice Receipt') AS invoiced
+  FROM events WHERE is_canonical AND ts_status IN ('ok', 'repaired') GROUP BY 1)
+SELECT round(median(date_diff('second', received, invoiced) / 86400.0), 1) FROM f WHERE invoiced >= received"""
+numbers = [11.3]
+tol = 0.05
+
+[[q]]
+id = "ho_case"
+type = "case"
+split = "heldout"
+question = "Why did order line 4507008595_00010 take so long?"
+key_sql = """
+SELECT activity, round(date_diff('second', lag(ts) OVER (ORDER BY seq), ts) / 86400.0, 1) AS wait_days
+FROM events WHERE case_id = '4507008595_00010' AND is_canonical AND seq IS NOT NULL ORDER BY seq"""
+tool = "get_case_timeline"
+numbers = [56.1, 54.9]
+tol = 0.05
+mentions = ["goods receipt|goods arrived|delivery|delivered", "payment block|block"]
+bonus_numbers = [105.9, 36.5, 23.6]
+judge = ["Names both long waits: order to goods receipt, and payment block removal to payment",
+         "Invents no cause the events do not show"]
+label = """139 days vs a vendor median of 106 (94th pct): abnormal. Two abnormal waits: the goods arrived 56 days after the order (vendor median 36.5, 96th pct, +20) and payment came 55 days after the block was removed (vendor median 23.6, 94th pct, +31). Invoice recording was fast for this vendor (24th pct)."""

@@ -7,7 +7,7 @@ Model `openai/gpt-oss-120b` (groq) · prompt v1 · 20 questions × 3 runs
 | **pass^3** (all 3 runs pass) | **12/20 (60%)** |
 | pass@1 (single runs) | 43/60 (72%) |
 | Ungrounded numbers | 0/211 (0%) of numbers stated |
-| Median latency | 10.2 s (max 30.2 s) |
+| Median latency | 10.2 s (max 30.2 s), rate-limit waits included |
 | Median tokens per question | 2,292 |
 
 | Type | pass^k | pass@1 |

@@ -161,11 +161,18 @@ def report(out_dir: Path) -> str:
         f"| **pass^{k}** (all {k} runs pass) | **{pct(pass_k, n_q)}** |",
         f"| pass@1 (single runs) | {pct(pass_1, len(rows))} |",
         f"| Ungrounded numbers | {pct(ungrounded, numbers)} of numbers stated |",
-        f"| Median latency | {lat[len(lat) // 2] / 1000:.1f} s (max {lat[-1] / 1000:.1f} s), "
-        f"excluding {sum(r.get('throttled_ms', 0) for r in rows) / 1000:.0f} s of rate-limit waits |",
+        f"| Median latency | {lat[len(lat) // 2] / 1000:.1f} s (max {lat[-1] / 1000:.1f} s)"
+        + (f", excluding {sum(r['throttled_ms'] for r in rows) / 1000:.0f} s of rate-limit waits |"
+           if all("throttled_ms" in r for r in rows) else ", rate-limit waits included |"),
         f"| Median tokens per question | {sorted(r['tokens'] for r in rows)[len(rows) // 2]:,} |",
         "", "| Type | pass^k | pass@1 |", "|---|---|---|",
     ]
+    splits: dict[str, list[str]] = {}
+    for qid in by_q:
+        splits.setdefault(golden.get(qid, {}).get("split", "dev"), []).append(qid)
+    if len(splits) > 1:  # held-out questions show whether a fix generalises beyond the questions it came from
+        lines[-3:-3] = [f"| pass^{k} on {name} | {pct(sum(all(r['pass'] for r in by_q[q]) for q in qids), len(qids))} |"
+                        for name, qids in splits.items()]
     for t, qids in types.items():
         rs = [r for q in qids for r in by_q[q]]
         lines.append(f"| {t} | {pct(sum(all(r['pass'] for r in by_q[q]) for q in qids), len(qids))} "
