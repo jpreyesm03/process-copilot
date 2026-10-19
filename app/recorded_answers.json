@@ -1,0 +1,109 @@
+[
+ {
+  "question": "How many order lines are there per document type?",
+  "answer": "Order lines per document type [r1]:\n- Standard PO: 248,755\n- Framework order: 1,539\n- EC Purchase order: 1,440\n- Total: 251,734\n\nAssumptions: counts all rows in the cases table (one row per order line), including lines that were later deleted. To confirm: should deleted lines ('Delete Purchase Order Item') be excluded from these counts?",
+  "steps": [
+   {
+    "tool": "run_sql",
+    "args": "{\"query\": \"SELECT document_type, COUNT(*) AS order_lines FROM cases GROUP BY document_type ORDER BY order_lines DESC\"}"
+   }
+  ],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 4981
+ },
+ {
+  "question": "Which item category takes longest from order to payment for first-time payments, and what is its median?",
+  "answer": "'3-way match, invoice after GR' has the longest median time from order to first payment: 77.94 days (9,676 first payments) [r1].\n\nAssumptions: 'first payment' means the first closed cycle (cycle_no 1) of each order line. Cycle 1 includes ordering, so the time runs from order creation to the Clear Invoice event. I report the median because durations are skewed.\n\n- '3-way match, invoice before GR' is close behind at 77.11 days median (173,698 first payments), a gap of 0.83 days [r1].\n- '2-way match' has the shortest median at 39.73 days, but only 303 first payments, and its 90th percentile is 192.28 days, the highest of the three. The 90th percentile for 'invoice after GR' is 119.51 days [r1].\n\nTo confirm: Should the clock start at the order date (as here) or at the first invoice receipt? Would you like the 2-way match results broken down by vendor, since the sample is small?",
+  "steps": [
+   {
+    "tool": "run_sql",
+    "args": "{\"query\": \"SELECT k.item_category, COUNT(*) AS n_first_payments, median(c.days) AS median_days_order_to_payment, quantile_cont(c.days, 0.9) AS p90_days FROM cycles c JOIN cases k ON k.case_id = c.case_id WHERE c.cycle_no = 1 AND c.is_closed GROUP BY k.item_category ORDER BY median_days_order_to_payment DESC\"}"
+   }
+  ],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 10371
+ },
+ {
+  "question": "How many payment cycles are still open?",
+  "answer": "70,413 payment cycles are still open (is_closed = FALSE), out of 264,222 cycles in total [r1].\n\n- An open cycle has no 'Clear Invoice' yet, so it has not been paid.\n- Note: the first column in the query was mislabeled. Its value of 264,222 is the total cycle count, not the open count.\n\nAssumptions: 'Still open' means cycles with is_closed = FALSE. I did not exclude deleted lines or apply any date cutoff.\n\nTo confirm: Do you want this counted per cycle, as above, or per order line (case_id) that has at least one open cycle? Should deleted lines ('Delete Purchase Order Item') be excluded?",
+  "steps": [
+   {
+    "tool": "run_sql",
+    "args": "{\"query\": \"SELECT COUNT(*) AS open_cycles, COUNT(*) FILTER (WHERE is_closed = FALSE) AS not_closed, COUNT(*) AS total_cycles FROM cycles\"}"
+   }
+  ],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 7171
+ },
+ {
+  "question": "Which vendor has the most order lines that needed a payment block removed?",
+  "answer": "vendorID_0136 has the most order lines that needed a payment block removed: 6,765 lines [r1].\n\n- The next highest is vendorID_0104 with 4,285 lines [r1], so vendorID_0136 has 2,480 more.\n- The count uses canonical events with a 'Remove Payment Block' activity, counted as distinct order lines (case_id). It is a line count, not a EUR value.\n- Assumptions: 'needed a payment block removed' means the line has at least one 'Remove Payment Block' event. Duplicate event copies are excluded.\n- To confirm: Do you want this ranked by EUR value of the lines instead of line count? Do you want the share of all lines that had a block removed?",
+  "steps": [
+   {
+    "tool": "run_sql",
+    "args": "{\"query\": \"SELECT c.vendor, e.activity, COUNT(DISTINCT e.case_id) AS n_lines FROM events e JOIN cases c ON e.case_id = c.case_id WHERE e.is_canonical AND LOWER(e.activity) LIKE '%block%' GROUP BY c.vendor, e.activity ORDER BY n_lines DESC LIMIT 200\"}"
+   }
+  ],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 9373
+ },
+ {
+  "question": "Why did order line 4507000365_00010 take so long?",
+  "answer": "Line 4507000365_00010 took 141.99 days from order creation (2018-01-02) to payment (2018-05-24). The events show where the time went but not why.\n\n- The longest wait was Remove Payment Block (seq 5, event 10232) to Clear Invoice (seq 6, event 10233): 57.8 days. The vendor's median for this gap is 57.7 days (50th percentile), and similar lines' median is 29.4 days (76th percentile) [r1].\n- Record Invoice Receipt (seq 4, event 10231, 2018-02-15) to Remove Payment Block took 40.0 days. The vendor's median is 6.3 days (90th percentile) and similar lines' median is 9.2 days (77th percentile) [r1].\n- Create Purchase Order Item (seq 1, event 10228) to Vendor creates invoice (seq 2, event 10229) took 42.5 days. The vendor's median is 21.6 days (86th percentile) and similar lines' median is 15.5 days (88th percentile) [r1]. The supplier event carries a date only, so this gap is in whole days.\n- Goods receipt (seq 3) and invoice receipt (seq 4) followed the vendor invoice within 0.4 and 1.2 days [r1].\n- Overall, first payment was later than 94% of this vendor's payments (median 98.7 days) and 93% of similar lines (median 84.9 days) [r1].\n\nAssumptions: I used the line's throughput (first to last event), which here is one closed payment cycle. The data does not show why the payment block was removed 40 days after invoice receipt or why clearing took 57.8 days after that.\n\nTo confirm: Do you mean the full order-to-payment time (141.99 days) or the time from invoice receipt to payment? Do you also want other open or slow lines from this vendor?",
+  "steps": [
+   {
+    "tool": "get_case_timeline",
+    "args": "{\"case_id\": \"4507000365_00010\"}"
+   }
+  ],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 16771
+ },
+ {
+  "question": "Why did order line 4507004456_00010 take so long?",
+  "answer": "Line 4507004456_00010 (vendorID_0199, Sales, EUR 1,773.0, 3-way match with invoice before goods receipt) took 136.0 days from PO creation (2018-01-22) to payment (Clear Invoice, 2018-06-07) [r1]. Most of that time came after the invoice was received, in two long waits.\n\n- Record Invoice Receipt (seq 4, event 108808, 2018-02-01) to Change Price (seq 5, event 108809, 2018-05-16): 104.1 days. Similar lines (same category and value band) have a median of 6.6 days, and this wait is at their 95th percentile (n=352). The same vendor's median is 60.2 days (n=10, weak evidence) [r1].\n- Change Price (seq 5) to Remove Payment Block (seq 6, event 108810, 2018-06-05): 19.9 days. Similar lines have a median of 0.0 days, at the 98th percentile (n=313). The vendor's median is 0.4 days (n=12) [r1].\n- The other steps were short: PO to vendor invoice 4.5 days, goods receipt 2.4 days, invoice receipt 3.1 days, and Clear Invoice 2.0 days after the block removal [r1].\n- First payment compared with peers: 136.0 days against a similar-line median of 80.2 days (93rd percentile) and a vendor median of 71.1 days (88th percentile, n=127) [r1].\n\nThe events show when the price change and the payment block removal happened (users user_089 and user_112), but not why.\n\nAssumptions: I read \"took so long\" as the total throughput of the line, from PO creation to its last event. Here that is also the first and only closed payment cycle. No events were excluded.\n\nTo confirm: Do you mean the full 136 days, or only the time from invoice receipt to payment? The second is what the process metrics use for time to pay.",
+  "steps": [
+   {
+    "tool": "get_case_timeline",
+    "args": "{\"case_id\": \"4507004456_00010\"}"
+   }
+  ],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 15542
+ },
+ {
+  "question": "How many order lines are unpaid, and how much money is that?",
+  "answer": "27,539 order lines are unpaid, with a total ordered value of 102,476,649.00 EUR [r1].\n\n- Both methods agree: the event-based rule and the precomputed m_open_invoices table each return 27,539 lines and 102,476,649.00 EUR [r1].\n- The EUR figure is the ordered value (cases.value_eur), not the invoiced amount. The data has no invoice amounts, so the two can differ.\n- How long these invoices have been open is not computed yet. The data ends on 2019-01-17.\n\nAssumptions: An unpaid line has a 'Record Goods Receipt' and a 'Record Invoice Receipt' event but no 'Clear Invoice' event. Deleted lines ('Delete Purchase Order Item') are excluded. There is no date cutoff. Lines with an invoice but no goods receipt are not counted.\n\nTo confirm:\n1. Do you want the list split by vendor or item category, or the ageing (days open) of these invoices?\n2. Should the total use ordered value (as now) or another amount?",
+  "steps": [
+   {
+    "tool": "run_sql",
+    "args": "{\"query\": \"WITH f AS (SELECT case_id, MAX(CASE WHEN activity='Record Goods Receipt' THEN 1 ELSE 0 END) AS gr, MAX(CASE WHEN activity='Record Invoice Receipt' THEN 1 ELSE 0 END) AS inv, MAX(CASE WHEN activity='Clear Invoice' THEN 1 ELSE 0 END) AS paid, MAX(CASE WHEN activity='Delete Purchase Order Item' THEN 1 ELSE 0 END) AS del FROM events GROUP BY case_id), u AS (SELECT c.case_id, c.value_eur FROM f JOIN cases c USING (case_id) WHERE f.gr=1 AND f.inv=1 AND f.paid=0 AND f.del=0) SELECT 'events_rule' AS src, COUNT(*) AS lines, ROUND(SUM(value_eur),2) AS eur FROM u UNION ALL SELECT 'm_open_invoices', COUNT(*), ROUND(SUM(value_eur),2) FROM m_open_invoices\"}"
+   }
+  ],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 10945
+ },
+ {
+  "question": "What share of deliveries arrived on time versus the promised delivery date?",
+  "answer": "I can't answer this. The data has no promised or planned delivery dates, so on-time versus promised delivery cannot be measured. I have not used any other column as a stand-in.\n\nWhat the data does cover:\n- Event timestamps per order line (events table, ts and seq), so I can report how long lines take from first to last event (cases.throughput_days) or how long invoices take to pay (cycles.days).\n- Goods receipt activity per line (events with activity 'Record Goods Receipt'), so I can show whether and when goods were recorded as received, without comparing against any promise.\n\nTo measure on-time delivery, the promised delivery date per order line would need to be added to the warehouse. Assumptions: I read 'deliveries' as goods receipts recorded in the events. To confirm: Do you have a promised delivery date field in the source system? Should I instead report goods receipt timing relative to the order date?",
+  "steps": [],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 5007
+ },
+ {
+  "question": "Our vendor charges 100 EUR for 85 paint cans plus 30 lids. If a lid costs 0.50 EUR, what does one can cost?",
+  "answer": "That is an arithmetic question on numbers you supplied, which is outside what I can answer. I only answer questions about the purchase-to-pay data, for example: \"What are the top 5 vendors by open invoice value?\"",
+  "steps": [],
+  "model": "haiku",
+  "run": "2026-10-18_1859_v3_tlv2_haiku",
+  "latency_ms": 2558
+ }
+]
