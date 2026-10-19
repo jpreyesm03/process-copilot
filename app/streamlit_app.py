@@ -36,10 +36,10 @@ st.set_page_config(page_title="Process Copilot", page_icon="📦", layout="wide"
 
 def _secrets_to_env() -> None:
     """Streamlit Cloud keeps keys in st.secrets; the agent reads them from the environment."""
-    try:
-        for key in ("GROQ_API_KEY", "LLM_PROVIDER", "LLM_MODEL"):
-            if key in st.secrets and key not in os.environ:
-                os.environ[key] = str(st.secrets[key])
+    try:  # every top-level secret: provider keys (GROQ_API_KEY, ANTHROPIC_API_KEY...), LLM_*, TOPIC_*, LIMIT_*
+        for key, value in st.secrets.items():
+            if isinstance(value, str | int | float) and key not in os.environ:
+                os.environ[key] = str(value)
     except Exception:  # no secrets file locally: .env is used instead
         pass
 
