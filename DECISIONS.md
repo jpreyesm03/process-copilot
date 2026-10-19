@@ -88,3 +88,14 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 **Choice:** (c), for development and evals; the target model for a published demo is a frontier API model, so tuning on Claude is closer to what will ship. The provider keeps the eval honest: each call is a fresh process, built-in tools and MCP servers are off and the working directory is empty, so the model cannot read files (including the answer keys); our system prompt replaces the CLI's own (a test request is ~650 input tokens). Our loop, tools, output gate, traces and grader run unchanged. Each call reports its list-price cost, which answers "what would the API cost" before paying.
 **Known differences from the API:** tool use is prompted (JSON replies) instead of native function calling; temperature cannot be set; latency includes CLI start-up (~1 s per call). Results describe Claude with prompted tools; the final API run must confirm them.
 **Would change if:** the project goes public, then switch the provider to the paid API and re-run the evals to confirm.
+
+## D9 revised · "Unpaid" has no due-date cutoff: nothing is called overdue (2026-10-18)
+**Evidence:** the data has no due dates or payment terms ('Change payment term' occurs 7 times, with no term value). The first D9 reading treated lines created before Oct 2018 as due (4,302 lines / €16.3M), but €15.8M of that had the invoice recorded in Oct 2018 or later, weeks before the data ends (17 Jan 2019): most of it was probably not overdue. The headline shrank about 30× once "due" was checked.
+**Options:** (a) keep the creation-date cutoff · (b) invoice date + an assumed payment term · (c) age breakdown only · (d) compare with the vendor's own paid invoices.
+**Choice (JP):** no assumptions where the data has none, so (c) + (d). Unpaid = goods and invoice received, not paid, not deleted, with no date cutoff; report days open since the invoice was recorded and flag lines open longer than 90% of the same vendor's paid invoices (vendors with fewer than 30 paid invoices are reported as "too few to compare").
+**Result:** 27,539 open lines / €102.5M; 765 / €0.78M open longer than the vendor usually takes; €15.8M with vendors too rarely paid to have a baseline (a manual-review list).
+
+## D13 · Process metrics are tables built with the warehouse (2026-10-18)
+**Constraint:** C3 trust: the overview page, the agent and the tests must show the same number for the same question.
+**Choice:** `metrics.py` builds m_bottlenecks, m_variants, m_rework, m_conformance, m_open_invoices and m_summary at build time (about 1 s). Rework cost is compared within the same item category and value band (groups with at least 30 lines on each side), because rework is more common on bigger, more complex lines; it remains a correlation.
+**Would change if:** the data were refreshed daily, then compute them incrementally or as views.

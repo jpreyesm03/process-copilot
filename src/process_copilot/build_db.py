@@ -28,6 +28,8 @@ from pathlib import Path
 
 import duckdb
 
+from process_copilot.metrics import build_metrics
+
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CSV = ROOT / "data" / "processed" / "bpi2019_events.csv.gz"
 DEFAULT_DB = ROOT / "data" / "p2p.duckdb"
@@ -253,6 +255,7 @@ def build(csv_path: Path, db_path: Path) -> None:
                          'value differs across events (D3 uses Create PO Item)'
                   FROM (SELECT case_id FROM events GROUP BY 1 HAVING count(DISTINCT value_eur) > 1)
     """)
+    build_metrics(con)  # Phase 6: process metrics as tables, so the agent, the app and the tests read the same numbers
     con.close()
     print(f"built {db_path.name} in {time.time() - t0:.1f}s")
 
