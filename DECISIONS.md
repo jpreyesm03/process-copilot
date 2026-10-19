@@ -99,3 +99,9 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 **Constraint:** C3 trust: the overview page, the agent and the tests must show the same number for the same question.
 **Choice:** `metrics.py` builds m_bottlenecks, m_variants, m_rework, m_conformance, m_open_invoices and m_summary at build time (about 1 s). Rework cost is compared within the same item category and value band (groups with at least 30 lines on each side), because rework is more common on bigger, more complex lines; it remains a correlation.
 **Would change if:** the data were refreshed daily, then compute them incrementally or as views.
+
+## D11 revised · The output gate flags unverified numbers instead of hiding the answer (2026-10-18)
+**Evidence:** across the Haiku runs with prompts v2/v3 the gate withheld 7 answers and only 1 was a real error (a mis-added total); the other 6 were correct answers that mentioned an example number ("e.g. net 30", "such as 90") or an id. Prompt v2/v3 already declines the out-of-scope tricks (guard 5/5) before the gate is needed.
+**Options:** (a) keep withholding · (b) remove only the unverified number · (c) show the answer and mark each unverified number with a warning.
+**Choice (JP):** (c): most transparent; the user sees everything and knows which numbers did not come from the data. Cost: a determined user who gets the model to do out-of-scope arithmetic still sees it, marked [unverified] (prompt v1 did, 3 of 3 runs).
+**Would change if:** the demo is public and guard evals show the scope rule leaking, then move to (b) or add an input classifier.

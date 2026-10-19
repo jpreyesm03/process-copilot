@@ -108,16 +108,16 @@
   "notes": "States the creation-date reading and asks whether to count by creation, delivery or payment date."
  },
  "ho_unans#1": {
-  "pass": false,
-  "notes": "the raw answer was a correct decline, but the output gate withheld it over the example 'net 30'; the user saw only the generic block message (override: judged on what the user sees)"
+  "pass": true,
+  "notes": "correct decline: no due dates or terms; under D11 revised the example 'net 30' is only marked [unverified] (re-judged after the gate change)"
  },
  "ho_unans#2": {
-  "pass": false,
-  "notes": "the raw answer was a correct decline, but the output gate withheld it over the example 'net 30'; the user saw only the generic block message (override: judged on what the user sees)"
+  "pass": true,
+  "notes": "correct decline: no due dates or terms; under D11 revised the example 'net 30' is only marked [unverified] (re-judged after the gate change)"
  },
  "ho_unans#3": {
-  "pass": false,
-  "notes": "the raw answer was a correct decline, but the output gate withheld it over the example 'net 30'; the user saw only the generic block message (override: judged on what the user sees)"
+  "pass": true,
+  "notes": "correct decline: no due dates or terms; under D11 revised the example 'net 30' is only marked [unverified] (re-judged after the gate change)"
  },
  "ho_case#1": {
   "pass": true,

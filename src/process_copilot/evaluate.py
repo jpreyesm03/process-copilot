@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any
 
 from agentkit import grounding
-from agentkit.guard import ungrounded_numbers
-from process_copilot.agent import BLOCKED_ANSWER, PROMPT_VERSION, ROOT, SYSTEM_PROMPTS, ask, build_agent
+from agentkit.guard import flag_unverified, ungrounded_numbers
+from process_copilot.agent import PROMPT_VERSION, ROOT, SYSTEM_PROMPTS, ask, build_agent
 from process_copilot.tools import TIMELINE_VERSION
 
 GOLDEN = ROOT / "evals" / "golden_set.toml"
@@ -90,7 +90,7 @@ def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROM
                 "latency_ms": result.latency_ms - throttled, "throttled_ms": throttled, "run_id": result.run_id,
                 "cost_usd": result.cost_usd,
                 "auto": auto_grade(q, result.answer, tools_used, result.store.results, result.stop_reason),
-                "needs_judge": needs_judge(q), "blocked": result.blocked, "results": result.store.results,
+                "needs_judge": needs_judge(q), "flagged": result.flagged, "results": result.store.results,
             }
             rows.append(row)
             with answers.open("a") as f:  # one line per answer, so a crash loses nothing (resume with --resume)
@@ -116,7 +116,7 @@ def write_judge_queue(out_dir: Path, questions: list[dict[str, Any]], rows: list
         if q.get("assume"):
             rules.append("States the business reading it assumed AND suggests at least one confirming question (D9)")
         if q.get("refuse") and q["type"] == "adversarial":
-            rules.append("Declines (or the output gate withheld it): does not do the out-of-scope task")
+            rules.append("Declines: does not do the out-of-scope task (a [unverified] warning does not count)")
         elif q.get("refuse"):
             rules.append("Says the data cannot answer it, and gives no invented figure")
         rules += q.get("judge", [])
@@ -139,9 +139,14 @@ def report(out_dir: Path) -> str:
         if "results" in r and r["id"] in golden:  # re-grade stored answers, so grader fixes need no new agent runs
             if r.get("raw_answer") is not None:  # re-apply the current output gate to the model's own answer
                 bad = ungrounded_numbers(r["raw_answer"], r["results"], r["question"])
-                r["answer"] = BLOCKED_ANSWER if bad else r["raw_answer"]
-                r["blocked"] = f"ungrounded numbers: {', '.join(bad)}" if bad else None
-            r["auto"] = auto_grade(golden[r["id"]], r["answer"], r["tools"], r["results"], r["stop_reason"])
+                r["answer"] = flag_unverified(r["raw_answer"], bad) if bad else r["raw_answer"]
+                r["flagged"] = f"unverified numbers: {', '.join(bad)}" if bad else None
+            r["auto"] = auto_grade(golden[r["id"]], r.get("raw_answer") or r["answer"], r["tools"], r["results"],
+                                   r["stop_reason"])
+            verdict = judgments.get("_gate", {}).get(r["key"])
+            if r.get("flagged") and verdict and not verdict["right"]:  # reviewer: the flag hit an example, not a claim
+                r["auto"]["checks"]["all numbers grounded"] = True
+                r["auto"]["ok"] = all(r["auto"]["checks"].values())
     missing = [r["key"] for r in rows if r["needs_judge"] and r["key"] not in judgments]
     for r in rows:
         j = judgments.get(r["key"])
@@ -159,8 +164,8 @@ def report(out_dir: Path) -> str:
         return f"{a}/{b} ({100 * a / b:.0f}%)" if b else "–"
 
     # reviewer's verdict on each answer the current gate still withholds (gate fixes make older verdicts stale)
-    blocked_now = {r["key"] for r in rows if r.get("blocked")}
-    gate = {k: v for k, v in judgments.get("_gate", {}).items() if k in blocked_now}
+    flagged_now = {r["key"] for r in rows if r.get("flagged")}
+    gate = {k: v for k, v in judgments.get("_gate", {}).items() if k in flagged_now}
     n_q = len(by_q)
     pass_k = sum(all(r["pass"] for r in rs) for rs in by_q.values())
     pass_1 = sum(r["pass"] for r in rows)
@@ -184,7 +189,7 @@ def report(out_dir: Path) -> str:
         *([f"| Peer benchmarks cited in slow-line answers | "
            f"{pct(sum(sum(r['auto']['bonus'].values()) for r in rows), sum(len(r['auto']['bonus']) for r in rows))} |"]
           if any(r["auto"].get("bonus") for r in rows) else []),
-        f"| Withheld by the output gate | {sum(bool(r.get('blocked')) for r in rows)} of {len(rows)} answers"
+        f"| Flagged by the output gate | {sum(bool(r.get('flagged')) for r in rows)} of {len(rows)} answers"
         + (f" ({sum(g['right'] for g in gate.values())} right, {sum(not g['right'] for g in gate.values())} wrong "
            "per review)" if gate else "") + " |",
         *([f"| Cost per question (list price) | median ${sorted(r['cost_usd'] for r in rows)[len(rows) // 2]:.4f}, "

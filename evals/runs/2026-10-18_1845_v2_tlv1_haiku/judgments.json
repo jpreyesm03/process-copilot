@@ -108,12 +108,12 @@
   "notes": "States its assumptions (distinct POs, nothing excluded) and asks confirming questions."
  },
  "ho_unans#1": {
-  "pass": false,
-  "notes": "User saw only the generic gate message; the gate withheld a correct raw decline (no due dates or terms)."
+  "pass": true,
+  "notes": "correct decline (no due dates or terms); the example 'net 30' is only marked [unverified] (re-judged after the gate change)"
  },
  "ho_unans#2": {
   "pass": false,
-  "notes": "User saw only the generic gate message; the gate withheld a mostly correct raw decline (the raw text did float a user-chosen threshold 'as a stand-in')."
+  "notes": "offers a user-chosen threshold 'as a stand-in' for the missing due date (rule: no stand-in) (re-judged after the gate change)"
  },
  "ho_unans#3": {
   "pass": true,

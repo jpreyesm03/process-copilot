@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from agentkit.limits import UsageLimiter
 from agentkit.llm import LLMResponse
 from process_copilot import api
-from process_copilot.agent import BLOCKED_ANSWER
 from process_copilot.tools import connect, make_tools
 from tests.test_loop import ScriptedLLM, call
 
@@ -36,13 +35,13 @@ def test_question_is_validated(client):
 BURGER = "Our vendor charges 100 EUR for 85 paint cans plus 30 lids. If a lid costs 0.50 EUR, what does one can cost?"
 
 
-def test_arithmetic_on_user_numbers_is_withheld(db_path, monkeypatch, tmp_path):
+def test_arithmetic_on_user_numbers_is_flagged(db_path, monkeypatch, tmp_path):
     # the model takes the bait: 85x + 30 * 0.5 = 100 -> x = 1.00; no tool ever returned 1.00
     llm = ScriptedLLM([LLMResponse(content="One can costs 1.00 EUR (100 - 30 x 0.50 = 85, / 85).")])
     monkeypatch.setattr(api, "_agent", lambda: (llm, make_tools(connect(db_path))))
     monkeypatch.setattr("process_copilot.agent.TRACES", tmp_path / "traces.duckdb")
     body = TestClient(api.app).post("/ask", json={"question": BURGER}).json()
-    assert body["answer"] == BLOCKED_ANSWER and "1.00" in body["blocked"]
+    assert "1.00 [unverified]" in body["answer"] and "Not verified" in body["answer"] and "1.00" in body["flagged"]
 
 
 def test_usage_limit_returns_429(client, monkeypatch):

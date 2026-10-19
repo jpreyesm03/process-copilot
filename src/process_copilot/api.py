@@ -41,7 +41,7 @@ class AskResponse(BaseModel):
     tokens: int
     latency_ms: int
     run_id: str
-    blocked: str | None = None  # why a guard withheld the model's answer, if it did
+    flagged: str | None = None  # numbers the output gate could not verify (marked [unverified] in the answer)
 
 
 @lru_cache(maxsize=1)
@@ -64,4 +64,4 @@ def ask_endpoint(req: AskRequest, request: Request) -> AskResponse:
         result = ask(req.question, llm=llm, tools=tools)
     return AskResponse(answer=result.answer, stop_reason=result.stop_reason,
                        steps=[Step(**s) for s in result.steps], tokens=result.tokens_in + result.tokens_out,
-                       latency_ms=result.latency_ms, run_id=result.run_id, blocked=result.blocked)
+                       latency_ms=result.latency_ms, run_id=result.run_id, flagged=result.flagged)

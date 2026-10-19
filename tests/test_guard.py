@@ -19,3 +19,9 @@ def test_limits_per_client_per_hour_and_per_day():
     assert "daily limit" in limiter.check("c")
     now[0] = 86_400  # a day later both windows have rolled over
     assert limiter.check("a") is None
+
+
+def test_flagging_marks_only_the_unverified_number():
+    from agentkit.guard import flag_unverified
+    out = flag_unverified("Terms such as net 30 days; 300 lines are open", ["30"])
+    assert "net 30 [unverified] days" in out and "300 lines" in out and out.endswith("treat them with caution.")

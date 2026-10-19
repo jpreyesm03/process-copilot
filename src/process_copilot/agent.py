@@ -8,7 +8,7 @@ import os
 import sys
 from pathlib import Path
 
-from agentkit.guard import ungrounded_numbers
+from agentkit.guard import flag_unverified, ungrounded_numbers
 from agentkit.llm import LLMClient
 from agentkit.llm_cli import ClaudeCLIClient
 from agentkit.loop import AgentResult, run_agent
@@ -189,9 +189,6 @@ NO quantities or unit prices, NO payment terms and NO contract prices.
 """
 
 SYSTEM_PROMPTS = {"v1": PROMPT_V1, "v2": PROMPT_V2, "v3": PROMPT_V3}
-BLOCKED_ANSWER = ("I could not verify every number in my answer against the purchase-to-pay data, so I am not "
-                  "showing it. I only answer questions about that data, for example: "
-                  "\"Which vendors have the most payment blocks?\"")
 SYSTEM_PROMPT = SYSTEM_PROMPTS[PROMPT_VERSION]
 
 
@@ -214,12 +211,12 @@ def ask(question: str, *, llm=None, tools=None, trace_path: Path | None = None,
 
 
 def apply_gate(result: AgentResult, question: str) -> AgentResult:
-    """Output gate (D11): never show a number the data did not produce. Re-applicable to a stored raw answer."""
+    """Output gate (D11 revised): mark every number the data did not produce. Re-applicable to a stored raw answer."""
     if result.raw_answer is None:
         result.raw_answer = result.answer
     unverified = ungrounded_numbers(result.raw_answer, result.store.results, question)
-    result.blocked = f"ungrounded numbers: {', '.join(unverified)}" if unverified else None
-    result.answer = BLOCKED_ANSWER if unverified else result.raw_answer
+    result.flagged = f"unverified numbers: {', '.join(unverified)}" if unverified else None
+    result.answer = flag_unverified(result.raw_answer, unverified) if unverified else result.raw_answer
     return result
 
 
