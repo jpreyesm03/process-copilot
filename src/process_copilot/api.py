@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from agentkit.limits import UsageLimiter
-from process_copilot.agent import ask, build_agent
+from process_copilot.agent import OUT_OF_SCOPE_ANSWER, ask, build_agent, topic_gate
 
 app = FastAPI(title="Process Copilot", description="Ask questions about the purchase-to-pay process.")
 _lock = threading.Lock()  # one DuckDB connection and one agent run at a time (enough for a demo)
@@ -49,6 +49,12 @@ def _agent():
     return build_agent()
 
 
+@lru_cache(maxsize=1)
+def _gate():
+    """The topic gate is on when TOPIC_MODEL is set (needs its provider's key); off in tests and local runs."""
+    return topic_gate() if os.getenv("TOPIC_MODEL") else None
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -59,6 +65,12 @@ def ask_endpoint(req: AskRequest, request: Request) -> AskResponse:
     refused = limiter.check(request.client.host if request.client else "unknown")
     if refused:
         raise HTTPException(status_code=429, detail=refused)
+    gate = _gate()
+    if gate is not None:
+        verdict = gate.check(req.question)
+        if not verdict.allowed:  # blocked or undecided: the main model is not called
+            return AskResponse(answer=OUT_OF_SCOPE_ANSWER, stop_reason="out_of_scope", steps=[],
+                               tokens=verdict.tokens, latency_ms=0, run_id="")
     llm, tools = _agent()
     with _lock:
         result = ask(req.question, llm=llm, tools=tools)

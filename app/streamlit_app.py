@@ -75,6 +75,15 @@ def shared() -> tuple[threading.Lock, UsageLimiter]:
     return threading.Lock(), UsageLimiter(per_client_per_hour=PER_HOUR, per_day=PER_DAY)
 
 
+@st.cache_resource
+def gate():
+    """Topic gate (D14): a small model with its own quota screens every question before the main model."""
+    _secrets_to_env()
+    from process_copilot.agent import topic_gate
+
+    return topic_gate(), UsageLimiter(per_client_per_hour=30, per_day=500)
+
+
 def q(sql: str, params: list | None = None) -> pd.DataFrame:
     lock, _ = shared()
     with lock:  # one DuckDB connection shared by all sessions
@@ -129,7 +138,8 @@ def overview() -> None:
 def ask_page() -> None:
     st.title("Ask the data")
     st.caption(f"An AI analyst that answers with SQL and order-line timelines over the warehouse, cites its evidence "
-               f"and marks any number it cannot trace to the data. Live model: gpt-oss-120b (Groq free tier, about "
+               f"and marks any number it cannot trace to the data. Only questions about this purchase-to-pay data are "
+               f"answered (a topic check runs first). Live model: gpt-oss-120b (Groq free tier, about "
                f"{PER_DAY} questions a day for everyone). When the live model is unavailable, recorded answers "
                f"from the evaluated configuration are shown for the sample questions.")
     if "sid" not in st.session_state:
@@ -142,31 +152,53 @@ def ask_page() -> None:
     if not question:
         return
     st.chat_message("user").write(question)
+    answers = st.session_state.setdefault("answers", {})
+    if question not in answers:  # Streamlit reruns the page on every click: answer each question once per visitor
+        answers[question] = _answer(question)
+    kind, text, steps, footer = answers[question]
+    with st.chat_message("assistant"):
+        if kind == "warning":
+            st.warning(text)
+            return
+        if kind == "recorded":  # footer = (why the live model was not used, where the answer was recorded)
+            st.warning(footer[0])
+            footer = footer[1]
+        st.markdown(text)
+        if steps is not None:
+            _show_steps(steps, footer)
+
+
+def _answer(question: str) -> tuple[str, str, list | None, object]:
+    """('live' | 'recorded' | 'blocked' | 'warning', text, steps, footer)."""
+    from process_copilot.agent import OUT_OF_SCOPE_ANSWER, ask
+
     lock, limiter = shared()
-    refused = limiter.check(st.session_state.sid)
-    result, error = None, refused
-    if not refused:
+    recorded = next((r for r in RECORDED if r["question"] == question), None)
+    error = None
+    if recorded is None:  # sample questions skip the topic check: they are known to be in scope
+        topic, topic_limiter = gate()
+        error = topic_limiter.check(st.session_state.sid)
+        if not error:
+            verdict = topic.check(question)
+            if verdict.allowed is not True:
+                note = "" if verdict.allowed is False else " (The topic check is unavailable right now.)"
+                return "blocked", OUT_OF_SCOPE_ANSWER + note, None, ""
+    error = error or limiter.check(st.session_state.sid)
+    if not error:
         try:
             llm, tools = agent()
-            from process_copilot.agent import ask
-
             with lock, st.spinner("Querying the warehouse..."):
                 result = ask(question, llm=llm, tools=tools)
+            if result.answer:
+                tokens = result.tokens_in + result.tokens_out
+                return "live", result.answer, result.steps, f"{tokens:,} tokens · {result.latency_ms / 1000:.1f} s"
+            error = f"No answer within the step and token limits ({result.stop_reason})."
         except Exception as exc:  # quota, missing key, network: fall back to recorded answers
             error = f"The live model is unavailable right now ({type(exc).__name__})."
-    with st.chat_message("assistant"):
-        if result is not None and result.answer:
-            st.markdown(result.answer)
-            tokens = result.tokens_in + result.tokens_out
-            _show_steps(result.steps, f"{tokens:,} tokens · {result.latency_ms / 1000:.1f} s")
-            return
-        recorded = next((r for r in RECORDED if r["question"] == question), None)
-        if recorded:
-            st.warning(f"{error} Showing a recorded answer from the evaluated configuration ({recorded['model']}).")
-            st.markdown(recorded["answer"])
-            _show_steps(recorded["steps"], f"recorded in eval run {recorded['run']}")
-        else:
-            st.warning(f"{error or 'No answer.'} Pick one of the sample questions to see a recorded answer.")
+    if recorded:
+        note = f"{error} Showing a recorded answer from the evaluated configuration ({recorded['model']})."
+        return "recorded", recorded["answer"], recorded["steps"], (note, f"recorded in eval run {recorded['run']}")
+    return "warning", f"{error} Pick one of the sample questions to see a recorded answer.", None, ""
 
 
 def _show_steps(steps: list[dict], footer: str) -> None:
@@ -224,9 +256,10 @@ def quality() -> None:
     st.markdown(text)
 
 
+START = os.getenv("P2P_START_PAGE", "overview")  # lets headless tests open another page first
 pg = st.navigation([
-    st.Page(overview, title="Overview", icon="📊", default=True),
-    st.Page(ask_page, title="Ask the data", icon="💬"),
+    st.Page(overview, title="Overview", icon="📊", default=START == "overview"),
+    st.Page(ask_page, title="Ask the data", icon="💬", default=START == "ask"),
     st.Page(explorer, title="Line explorer", icon="🔎"),
     st.Page(quality, title="How we know it works", icon="✅"),
 ])

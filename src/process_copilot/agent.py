@@ -12,6 +12,7 @@ from agentkit.guard import flag_unverified, ungrounded_numbers
 from agentkit.llm import LLMClient
 from agentkit.llm_cli import ClaudeCLIClient
 from agentkit.loop import AgentResult, run_agent
+from agentkit.topic import TopicGate
 from agentkit.trace import Tracer
 from process_copilot.tools import DEFAULT_DB, TIMELINE_VERSION, connect, make_tools
 
@@ -190,6 +191,19 @@ NO quantities or unit prices, NO payment terms and NO contract prices.
 
 SYSTEM_PROMPTS = {"v1": PROMPT_V1, "v2": PROMPT_V2, "v3": PROMPT_V3}
 SYSTEM_PROMPT = SYSTEM_PROMPTS[PROMPT_VERSION]
+
+# topic gate (D14): a small classifier with its own quota screens questions before the main model is called
+TOPIC_DOMAIN = ("a company's purchase-to-pay process and its data: purchase orders and order lines, vendors, spend, "
+                "goods receipts, invoices, payments, payment blocks, price or quantity changes, process steps, delays")
+TOPIC_MODEL = "openai/gpt-oss-20b"  # own quota on Groq; the safeguard model allows only 3 requests/min free
+OUT_OF_SCOPE_ANSWER = ("I only answer questions about this company's purchase-to-pay data: orders, vendors, invoices, "
+                       "payments and delays. For example: \"Which vendors have the most payment blocks?\"")
+
+
+def topic_gate(model: str | None = None) -> TopicGate:
+    llm = LLMClient(os.getenv("TOPIC_PROVIDER", "groq"), model or os.getenv("TOPIC_MODEL", TOPIC_MODEL),
+                    timeout_s=20, max_retries=2)
+    return TopicGate(llm, TOPIC_DOMAIN)
 
 
 def build_agent(db_path: Path = DEFAULT_DB, provider: str | None = None, model: str | None = None,

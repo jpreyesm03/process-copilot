@@ -105,3 +105,11 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 **Options:** (a) keep withholding · (b) remove only the unverified number · (c) show the answer and mark each unverified number with a warning.
 **Choice (JP):** (c): most transparent; the user sees everything and knows which numbers did not come from the data. Cost: a determined user who gets the model to do out-of-scope arithmetic still sees it, marked [unverified] (prompt v1 did, 3 of 3 runs).
 **Would change if:** the demo is public and guard evals show the scope rule leaking, then move to (b) or add an input classifier.
+
+## D14 · A topic gate screens every question before the main model (2026-10-18)
+**Constraint:** C2 cost and the public demo's shared daily quota: only purchase-to-pay questions should reach the main model.
+**Evidence:** the scope rule in the prompt is a request, not a wall (prompt v1 wrote the poem and did the burger arithmetic in all 3 runs), and the output gate only marks numbers (D11 revised). The live model (gpt-oss-120b on Groq) was never evaluated on the guard questions.
+**Options:** (a) rely on the prompt and measure first · (b) a small classifier before the agent.
+**Choice (JP):** (b). `openai/gpt-oss-20b` on Groq with a one-word ALLOW/BLOCK policy: about 360 tokens and under a second per question, on its own quota (~550 checks a day free). It fails closed (no decision = no main-model call). In the app the gate has its own limits (30 per visitor per hour, 500 per day) and only in-scope questions count against the main model's 25 a day. `gpt-oss-safeguard-20b` was tried first but allows 3 requests per minute on the free tier.
+**Measured:** see `evals/topic_gate.md` (in scope must pass, including unanswerable and vague questions; off-topic must be blocked, including arithmetic dressed in the domain's words and jailbreaks).
+**Would change if:** the gate starts blocking real questions (log and review blocked questions), or the main model moves to a paid key with its own budget cap.
