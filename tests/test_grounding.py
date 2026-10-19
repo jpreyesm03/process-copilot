@@ -74,3 +74,7 @@ def test_column_total_is_grounded_but_a_wrong_sum_is_not():
     results = {"r1": {"columns": ["type", "n"], "rows": [["A", 248755], ["B", 1539], ["C", 1440]]}}
     found = {n.text: n.status for n in check("Total 251,734 lines; earlier I said 250,734", results)}
     assert found == {"251,734": "grounded", "250,734": "ungrounded"}
+
+
+def test_bare_years_are_dates_not_quantities():
+    assert extract_numbers("lines created late in 2018, before 2019") == []

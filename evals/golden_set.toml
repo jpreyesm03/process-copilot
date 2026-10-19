@@ -85,8 +85,10 @@ numbers = [70413]
 id = "cyc_02"
 type = "cycles"
 question = "How many order lines were paid in more than one cycle?"
-key_sql = "SELECT count(*) FROM (SELECT case_id FROM cycles GROUP BY 1 HAVING count(*) > 1)"
-numbers = [8338]
+# fixed 2026-10-18: the first key (8,338) counted any line with 2+ cycles, including lines paid once whose next
+# cycle is still open; "paid in more than one cycle" means 2+ closed cycles. Found when an agent answered 6,565.
+key_sql = "SELECT count(*) FROM (SELECT case_id FROM cycles WHERE is_closed GROUP BY 1 HAVING count(*) > 1)"
+numbers = [6565]
 
 [[q]]
 id = "cyc_03"

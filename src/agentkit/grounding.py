@@ -29,6 +29,7 @@ _MONTH = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?"
 IGNORE = re.compile(
     r"`[^`]*`|【[^】]*】|\[r\d+\]|\b\d{10}\s*[_-]\s*\d{5}\b|vendor\s*_?\s*ID[\s_]*\d+"
     r"|\b\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?\b|\b\d{1,2}:\d{2}\b|\b\d+(?:st|nd|rd|th)\b"
+    r"|\b20[0-3]\d\b(?![.,]\d)"  # a bare year ("created in 2018"), not a quantity
     rf"|\b(?:\d{{1,2}}[\s-]+)?{_MONTH}(?:\s+\d{{1,2}},?)?(?:[\s-]+\d{{4}})?\b"
     r"|\b(?:seq|steps?|cycle|r)\s*\d+(?:\s*(?:→|->|–|-|to|and)\s*\d+)?",
     re.IGNORECASE,

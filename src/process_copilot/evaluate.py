@@ -178,6 +178,7 @@ def report(out_dir: Path) -> str:
         + (f", excluding {sum(r['throttled_ms'] for r in rows) / 1000:.0f} s of rate-limit waits |"
            if all("throttled_ms" in r for r in rows) else ", rate-limit waits included |"),
         f"| Median tokens per question | {sorted(r['tokens'] for r in rows)[len(rows) // 2]:,} |",
+        f"| Withheld by the output gate | {sum(bool(r.get('blocked')) for r in rows)} of {len(rows)} answers |",
         *([f"| Cost per question (list price) | median ${sorted(r['cost_usd'] for r in rows)[len(rows) // 2]:.4f}, "
            f"total ${sum(r['cost_usd'] for r in rows):.2f} |"] if any(r.get("cost_usd") for r in rows) else []),
         "", "| Type | pass^k | pass@1 |", "|---|---|---|",

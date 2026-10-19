@@ -4,17 +4,18 @@ Model `openai/gpt-oss-120b` (groq) · prompt v1 · timeline v1 · 20 questions �
 
 | Metric | Value |
 |---|---|
-| **pass^3** (all 3 runs pass) | **12/20 (60%)** |
-| pass@1 (single runs) | 43/60 (72%) |
+| **pass^3** (all 3 runs pass) | **11/20 (55%)** |
+| pass@1 (single runs) | 40/60 (67%) |
 | Ungrounded numbers | 0/211 (0%) of numbers stated |
 | Median latency | 10.2 s (max 30.2 s), rate-limit waits included |
 | Median tokens per question | 2,292 |
+| Withheld by the output gate | 0 of 60 answers |
 
 | Type | pass^k | pass@1 |
 |---|---|---|
 | descriptive | 3/3 (100%) | 9/9 (100%) |
 | time | 1/3 (33%) | 6/9 (67%) |
-| cycles | 3/3 (100%) | 9/9 (100%) |
+| cycles | 2/3 (67%) | 6/9 (67%) |
 | case | 1/4 (25%) | 5/12 (42%) |
 | vendors | 3/3 (100%) | 9/9 (100%) |
 | unanswerable | 1/2 (50%) | 5/6 (83%) |
@@ -27,6 +28,9 @@ Model `openai/gpt-oss-120b` (groq) · prompt v1 · timeline v1 · 20 questions �
 | time_02 | 3 | number 77.9; mentions 'invoice after GR' |  |
 | time_03 | 1 | number 39.7 |  |
 | time_03 | 2 | number 39.7 |  |
+| cyc_02 | 1 | number 6565 |  |
+| cyc_02 | 2 | number 6565 |  |
+| cyc_02 | 3 | number 6565 |  |
 | case_01 | 1 | number 40; judge: misreads the timeline: says the payment block stayed in place for ~2 months, but the 57.8 days come after the block was removed; misses the 40-day wait to remove the block |  |
 | case_01 | 2 | number 40; judge: same misreading: 'the line sat blocked' during the 57.8 days after Remove Payment Block; misses the 40-day block wait |  |
 | case_01 | 3 | number 40 |  |
