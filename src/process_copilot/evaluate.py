@@ -158,6 +158,9 @@ def report(out_dir: Path) -> str:
     def pct(a: int, b: int) -> str:
         return f"{a}/{b} ({100 * a / b:.0f}%)" if b else "–"
 
+    # reviewer's verdict on each answer the current gate still withholds (gate fixes make older verdicts stale)
+    blocked_now = {r["key"] for r in rows if r.get("blocked")}
+    gate = {k: v for k, v in judgments.get("_gate", {}).items() if k in blocked_now}
     n_q = len(by_q)
     pass_k = sum(all(r["pass"] for r in rs) for rs in by_q.values())
     pass_1 = sum(r["pass"] for r in rows)
@@ -178,7 +181,9 @@ def report(out_dir: Path) -> str:
         + (f", excluding {sum(r['throttled_ms'] for r in rows) / 1000:.0f} s of rate-limit waits |"
            if all("throttled_ms" in r for r in rows) else ", rate-limit waits included |"),
         f"| Median tokens per question | {sorted(r['tokens'] for r in rows)[len(rows) // 2]:,} |",
-        f"| Withheld by the output gate | {sum(bool(r.get('blocked')) for r in rows)} of {len(rows)} answers |",
+        f"| Withheld by the output gate | {sum(bool(r.get('blocked')) for r in rows)} of {len(rows)} answers"
+        + (f" ({sum(g['right'] for g in gate.values())} right, {sum(not g['right'] for g in gate.values())} wrong "
+           "per review)" if gate else "") + " |",
         *([f"| Cost per question (list price) | median ${sorted(r['cost_usd'] for r in rows)[len(rows) // 2]:.4f}, "
            f"total ${sum(r['cost_usd'] for r in rows):.2f} |"] if any(r.get("cost_usd") for r in rows) else []),
         "", "| Type | pass^k | pass@1 |", "|---|---|---|",
