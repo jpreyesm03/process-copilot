@@ -66,3 +66,10 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 **Choice:** (b). The API has no memory, so (a) costs the user a second round trip; (c) gets noisy with 3+ readings. A number with its assumptions lets the user correct for factors they know and we don't.
 **Graded in evals:** the number must match the business-reading key, the answer must name its assumptions, and it must suggest at least one confirming question.
 **Would change if:** the API gets conversation memory, then asking first becomes cheap for high-stakes questions.
+
+## D10 · Evals: code grades what it can, a reviewer grades the rest (2026-10-18)
+**Constraint:** C2 cost and C3 trust (a grade must be explainable).
+**Evidence:** 14 of 20 questions are fully checkable by code (numbers within tolerance, required words, required tool, grounding). 6 need reading: stated assumptions (2 ambiguous), refusals (2 unanswerable), causal claims (4 slow lines, partly).
+**Options:** (a) LLM judge, same model as the agent (free, but grades its own kind of output) · (b) LLM judge, a different model · (c) human grading.
+**Choice:** a reviewer outside the agent's model family reads the 6 judged questions (18 answers per run) from `judge_queue.md` and records pass/fail with a note in `judgments.json`; code grades everything else. No grading model runs inside the pipeline yet, so the eval itself costs $0 beyond the agent's calls.
+**Would change if:** runs become frequent (e.g. in CI); then move the judge prompt into code against an API model and report its agreement with the stored manual judgments.
