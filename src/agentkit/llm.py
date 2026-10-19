@@ -14,7 +14,6 @@ PROVIDERS = {
     "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),
     "gemini": ("https://generativelanguage.googleapis.com/v1beta/openai", "GEMINI_API_KEY"),
     "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY"),
-    "anthropic": ("https://api.anthropic.com/v1", "ANTHROPIC_API_KEY"),  # OpenAI-compatible endpoint; not yet run
     "ollama": ("http://localhost:11434/v1", None),
 }
 RETRY_STATUS = {429, 500, 502, 503, 504}
