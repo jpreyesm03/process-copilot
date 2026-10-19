@@ -1,0 +1,11 @@
+{
+  "h2_biggest_vendor#1": {"pass": true, "notes": "States 'Biggest means total ordered value (cases.value_eur)... not amount paid' and asks 'Do you want this ranked by amount paid...?'."},
+  "h2_biggest_vendor#2": {"pass": true, "notes": "States the ordered-value reading and asks 'Do you want the ranking by value paid... Or by number of order lines?'; rubric met, though 'It also has the most order lines of any vendor' is wrong (vendorID_0136 has 14,471) and is outside the rubric."},
+  "h2_biggest_vendor#3": {"pass": true, "notes": "States 'Biggest means total ordered value... not the amount paid' and asks about ranking by order lines, period, company or spend area."},
+  "h2_promised_date#1": {"pass": true, "notes": "Says 'The data cannot answer this', no figure, and only offers goods-receipt timing as a separate optional question."},
+  "h2_promised_date#2": {"pass": true, "notes": "Says the data cannot answer it, explicitly notes goods-receipt timing 'is not a comparison against a promised date', no invented figure."},
+  "h2_promised_date#3": {"pass": true, "notes": "Clearly says it can't answer and 'I won't use another column as a substitute'; no figure."},
+  "h2_why_slow_line#1": {"pass": true, "notes": "Names the 114.9-day Remove Payment Block -> Clear Invoice wait, percentiles (99th similar, 87th vendor) match the tool output, says the events do not show why, and invents no cause."},
+  "h2_why_slow_line#2": {"pass": true, "notes": "Names the 114.9-day main delay with vendor median 99.9 (87th) and 18.1-day GR as smaller; all figures match r1 and 'The events do not show why' avoids invented causes."},
+  "h2_why_slow_line#3": {"pass": true, "notes": "Names the 114.9-day wait as the main delay, percentiles match r1, and 'the cause of the 115-day gap is not visible in this data' avoids invented causes."}
+}

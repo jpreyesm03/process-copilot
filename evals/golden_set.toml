@@ -333,3 +333,121 @@ FROM (SELECT vendor, sum(value_eur) AS eur, row_number() OVER (ORDER BY sum(valu
       FROM cases GROUP BY 1)"""
 numbers = [13.3]
 tol = 0.02
+
+# ---------- held out 2 (2026-10-18): written by an independent author from the data only, without seeing the
+# prompt or the other questions; keys re-verified (h2_counts corrected to POs created in 2018) ----------
+[[q]]
+id = "h2_counts"
+type = "descriptive"
+split = "heldout2"
+question = "How many purchase orders did we create in 2018, and how many order lines do they contain in total?"
+key_sql = """
+SELECT count(DISTINCT c.po), count(*) FROM cases c
+WHERE c.case_id IN (SELECT case_id FROM events WHERE activity = 'Create Purchase Order Item' AND year(ts) = 2018)"""
+numbers = [76316, 251352]
+tol = 0.02
+
+[[q]]
+id = "h2_paid_share"
+type = "descriptive"
+split = "heldout2"
+question = "What percentage of our order lines have been paid at least once (at least one invoice cleared)?"
+key_sql = """
+SELECT round(100.0 * count(DISTINCT case_id) / (SELECT count(*) FROM cases), 2)
+FROM events WHERE activity = 'Clear Invoice' AND is_canonical
+"""
+numbers = [72.96]
+tol = 0.02
+
+[[q]]
+id = "h2_po_to_gr"
+type = "time"
+split = "heldout2"
+question = "For Standard PO lines that have a goods receipt, what is the median number of days from the creation of the order line to its first goods receipt?"
+key_sql = """
+WITH p AS (SELECT case_id, ts FROM events WHERE is_canonical AND ts_status IN ('ok','repaired') AND activity='Create Purchase Order Item'),
+g AS (SELECT case_id, min(ts) ts FROM events WHERE is_canonical AND ts_status IN ('ok','repaired') AND activity='Record Goods Receipt' GROUP BY 1)
+SELECT count(*), median(epoch(g.ts - p.ts)/86400.0)
+FROM p JOIN g USING (case_id) JOIN cases c USING (case_id)
+WHERE c.document_type = 'Standard PO'
+"""
+numbers = [10.0]
+tol = 0.05
+mentions = ["median"]
+
+[[q]]
+id = "h2_first_payment"
+type = "time"
+split = "heldout2"
+question = "For Standard PO lines, what is the median number of days from the start of the line to its first payment? Only count lines where the first payment actually happened, and measure to the first payment only, not later ones."
+key_sql = """
+SELECT count(*), median(y.days)
+FROM cycles y JOIN cases c USING (case_id)
+WHERE y.cycle_no = 1 AND y.is_closed AND c.document_type = 'Standard PO'
+"""
+numbers = [77.2]
+tol = 0.05
+mentions = ["median"]
+
+[[q]]
+id = "h2_slow_payers"
+type = "vendors"
+split = "heldout2"
+question = "Among Standard PO lines, which 3 vendors take longest to get paid, measured by the median length of their closed payment cycles in days? Only consider vendors with at least 500 closed payment cycles."
+key_sql = """
+SELECT c.vendor, count(*) AS n_cycles, median(y.days) AS med_days
+FROM cycles y JOIN cases c USING (case_id)
+WHERE y.is_closed AND c.document_type = 'Standard PO'
+GROUP BY 1 HAVING count(*) >= 500
+ORDER BY med_days DESC LIMIT 3
+"""
+numbers = [171.2, 150.1, 135.1]
+tol = 0.05
+mentions = ["vendorID_0555", "vendorID_0197", "vendorID_0468"]
+
+[[q]]
+id = "h2_biggest_vendor"
+type = "ambiguous"
+split = "heldout2"
+question = "Who is our biggest vendor?"
+key_sql = """
+-- most business-relevant reading: biggest by ordered value (EUR)
+SELECT vendor, sum(value_eur) AS spend, count(DISTINCT po) AS pos, count(*) AS lines
+FROM cases GROUP BY 1 ORDER BY spend DESC LIMIT 3
+-- alternative reading by number of order lines: vendorID_0136 (14,471 lines)
+"""
+numbers = [32104521]
+tol = 0.02
+mentions = ["vendorID_0104"]
+assume = true
+label = """Interprets "biggest" as highest ordered value (sum of line value at creation): vendorID_0104 at about EUR 32.1M (3.2% of total), ahead of vendorID_0159 (EUR 30.3M) and vendorID_0106 (EUR 24.7M). States the assumption, notes that by order-line count the answer would be vendorID_0136 (14,471 lines), and asks whether the user meant spend, volume or something else."""
+
+[[q]]
+id = "h2_promised_date"
+type = "unanswerable"
+split = "heldout2"
+question = "What percentage of our purchase orders were delivered after the delivery date the vendor promised?"
+key_sql = """
+-- no promised or confirmed delivery date field exists in events/cases; 'Receive Order Confirmation' has a timestamp only, no promised date
+"""
+refuse = true
+
+[[q]]
+id = "h2_why_slow_line"
+type = "case"
+split = "heldout2"
+question = "Why did order line 4508051115_00050 take so long?"
+key_sql = """
+SELECT days FROM waits WHERE case_id = '4508051115_00050'
+UNION ALL SELECT days FROM cycles WHERE case_id = '4508051115_00050' AND cycle_no = 1"""
+numbers = [139.1, 114.9]
+tol = 0.05
+mentions = ["Remove Payment Block|payment block", "Clear Invoice|paid|payment"]
+tool = "get_case_timeline"
+judge = [
+  "Names the Remove Payment Block -> Clear Invoice wait (about 115 days, from 17 Sep 2018 to 10 Jan 2019) as the main delay",
+  "Gives the line total as about 139 days and shows the other gaps are small (Create PO -> Goods Receipt about 18 days, the rest under 6 days)",
+  "Compares the long wait with the same gap at vendorID_0136 (median about 100 days, so typical for this vendor, roughly the 87th percentile) and/or across all vendors (median about 25 days, about the 98th percentile)",
+  "Does not claim the payment was due or overdue, and invents no cause (e.g. dispute, cash-flow decision, payment terms) that the events do not show"
+]
+label = """The line took 139 days in total, and 114.9 of them (about 83%) sit between Remove Payment Block (17 Sep 2018) and Clear Invoice (10 Jan 2019); goods were received after 18 days and the invoice was received and unblocked within about 6 days of that. That wait is typical for vendorID_0136 (median 99.9 days over 5,465 such gaps, about the 87th percentile) but very long against all vendors (median 25.1 days, about the 98th percentile). The data does not show why payment took that long."""

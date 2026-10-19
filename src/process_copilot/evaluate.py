@@ -62,7 +62,7 @@ def auto_grade(q: dict[str, Any], answer: str, tools_used: list[str], results: d
 
 def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROMPT_VERSION,
         resume: Path | None = None, provider: str | None = None, model: str | None = None,
-        timeline: str = TIMELINE_VERSION) -> Path:
+        timeline: str = TIMELINE_VERSION, traces: Path | None = None) -> Path:
     questions = load_golden(only)
     llm, tools = build_agent(provider=provider, model=model, timeline_version=timeline)
     out_dir = resume or RUNS / f"{datetime.now():%Y-%m-%d_%H%M}_{prompt}_tl{timeline}_{llm.model.split('/')[-1]}"
@@ -79,7 +79,7 @@ def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROM
             if (q["id"], i) in done:
                 continue
             throttled_before = llm.throttled_ms
-            result = ask(q["question"], llm=llm, tools=tools, prompt_version=prompt)
+            result = ask(q["question"], llm=llm, tools=tools, prompt_version=prompt, trace_path=traces)
             tools_used = [s["tool"] for s in result.steps]
             throttled = llm.throttled_ms - throttled_before
             row = {
@@ -235,12 +235,14 @@ def main() -> None:
     r.add_argument("--provider", default=None, help="groq | gemini | openai | ollama | claude-cli (default: .env)")
     r.add_argument("--model", default=None, help="e.g. openai/gpt-oss-120b, or haiku with claude-cli")
     r.add_argument("--timeline", default=TIMELINE_VERSION, choices=["v1", "v2"], help="timeline tool version")
+    r.add_argument("--traces", type=Path, default=None, help="trace database (default traces/traces.duckdb); "
+                   "use a separate file to run two evals at once")
     rep = sub.add_parser("report")
     rep.add_argument("run_dir", type=Path)
     args = parser.parse_args()
     if args.cmd == "run":
         out = run(args.repeats, args.only, args.pause, args.prompt, args.resume, args.provider, args.model,
-                  args.timeline)
+                  args.timeline, args.traces)
         print(report(out))
     else:
         print(report(args.run_dir))

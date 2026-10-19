@@ -1,0 +1,18 @@
+{
+  "model": "haiku",
+  "provider": "claude-cli",
+  "prompt_version": "v3",
+  "timeline_version": "v2",
+  "repeats": 3,
+  "questions": [
+    "h2_counts",
+    "h2_paid_share",
+    "h2_po_to_gr",
+    "h2_first_payment",
+    "h2_slow_payers",
+    "h2_biggest_vendor",
+    "h2_promised_date",
+    "h2_why_slow_line"
+  ],
+  "started": "2026-10-18_1927_v3_tlv2_haiku"
+}

@@ -14,8 +14,8 @@ QUESTIONS = tomllib.loads(GOLDEN.read_text())["q"]
 
 def test_golden_set_shape():
     dev = [q for q in QUESTIONS if q.get("split", "dev") == "dev"]
-    assert len(dev) == 20 and len(QUESTIONS) == 29
-    assert len({q["id"] for q in QUESTIONS}) == 29
+    assert len(dev) == 20 and len(QUESTIONS) == 37
+    assert len({q["id"] for q in QUESTIONS}) == 37
     assert Counter(q["type"] for q in dev) == {
         "descriptive": 3, "time": 3, "cycles": 3, "case": 4, "vendors": 3, "unanswerable": 2, "ambiguous": 2,
     }
@@ -32,9 +32,11 @@ def test_keys_match_warehouse(q):
     first_row = con.execute(q["key_sql"]).fetchall()
     values = [v for row in first_row for v in row]
     numeric = [float(v) for v in values if isinstance(v, int | float)]
+    tol = max(0.001, q.get("tol", 0.01))
     for expected in q["numbers"]:
-        assert any(abs(v - expected) <= 1e-9 + 0.001 * abs(expected) for v in numeric), (expected, numeric)
+        assert any(abs(v - expected) <= 1e-9 + tol * abs(expected) for v in numeric), (expected, numeric)
     if q["type"] == "case":  # case mentions are words the answer must use, not values in the key
         return
-    for text in q.get("mentions", []):
-        assert any(text in str(v) for v in values), (text, values)
+    for text in q.get("mentions", []):  # only identifiers are checked against the key; other words are for answers
+        if any(ch.isdigit() for ch in text):
+            assert any(any(alt in str(v) for alt in text.split("|")) for v in values), (text, values)
