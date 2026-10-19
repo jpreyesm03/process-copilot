@@ -93,7 +93,7 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 **Evidence:** the data has no due dates or payment terms ('Change payment term' occurs 7 times, with no term value). The first D9 reading treated lines created before Oct 2018 as due (4,302 lines / €16.3M), but €15.8M of that had the invoice recorded in Oct 2018 or later, weeks before the data ends (17 Jan 2019): most of it was probably not overdue. The headline shrank about 30× once "due" was checked.
 **Options:** (a) keep the creation-date cutoff · (b) invoice date + an assumed payment term · (c) age breakdown only · (d) compare with the vendor's own paid invoices.
 **Choice (JP):** no assumptions where the data has none, so (c) + (d). Unpaid = goods and invoice received, not paid, not deleted, with no date cutoff; report days open since the invoice was recorded and flag lines open longer than 90% of the same vendor's paid invoices (vendors with fewer than 30 paid invoices are reported as "too few to compare").
-**Result:** 27,539 open lines / €102.5M; 765 / €0.78M open longer than the vendor usually takes; €15.8M with vendors too rarely paid to have a baseline (a manual-review list).
+**Result:** 27,539 open lines / €102.5M; 828 / €1.02M open longer than the vendor usually takes (data end = last day with 10+ events, 18 Jan 2019); €15.8M with vendors too rarely paid to have a baseline (a manual-review list).
 
 ## D13 · Process metrics are tables built with the warehouse (2026-10-18)
 **Constraint:** C3 trust: the overview page, the agent and the tests must show the same number for the same question.

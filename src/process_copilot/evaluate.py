@@ -181,6 +181,9 @@ def report(out_dir: Path) -> str:
         + (f", excluding {sum(r['throttled_ms'] for r in rows) / 1000:.0f} s of rate-limit waits |"
            if all("throttled_ms" in r for r in rows) else ", rate-limit waits included |"),
         f"| Median tokens per question | {sorted(r['tokens'] for r in rows)[len(rows) // 2]:,} |",
+        *([f"| Peer benchmarks cited in slow-line answers | "
+           f"{pct(sum(sum(r['auto']['bonus'].values()) for r in rows), sum(len(r['auto']['bonus']) for r in rows))} |"]
+          if any(r["auto"].get("bonus") for r in rows) else []),
         f"| Withheld by the output gate | {sum(bool(r.get('blocked')) for r in rows)} of {len(rows)} answers"
         + (f" ({sum(g['right'] for g in gate.values())} right, {sum(not g['right'] for g in gate.values())} wrong "
            "per review)" if gate else "") + " |",

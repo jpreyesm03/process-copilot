@@ -9,6 +9,7 @@ Model `openai/gpt-oss-120b` (groq) · prompt v1 · timeline v1 · 20 questions �
 | Ungrounded numbers | 0/211 (0%) of numbers stated |
 | Median latency | 10.2 s (max 30.2 s), rate-limit waits included |
 | Median tokens per question | 2,292 |
+| Peer benchmarks cited in slow-line answers | 7/27 (26%) |
 | Withheld by the output gate | 0 of 60 answers |
 
 | Type | pass^k | pass@1 |
@@ -39,9 +40,9 @@ Model `openai/gpt-oss-120b` (groq) · prompt v1 · timeline v1 · 20 questions �
 | case_04 | 2 | judge: invents a cause: calls it a 'price dispute' |  |
 | case_04 | 3 | judge: invents a benchmark: 'far longer than the typical 2-3 weeks' (no tool gave it; the real first-cycle median is ~77 days) |  |
 | unans_01 | 2 | judge: dangerous: treats ts_original (the raw timestamp before date repair) as the promised date and reports '100% on time'; every number is grounded, the meaning is invented |  |
-| amb_01 | 1 | number 4302; number 16.3; judge: literal reading with no assumptions: 68,057 lines / EUR 260M with no closed cycle, including consignment (never paid per line by design) and lines not yet due; no confirming question |  |
-| amb_01 | 2 | number 4302; number 16.3; judge: same as run 1 |  |
-| amb_01 | 3 | number 4302; number 16.3; judge: same as run 1 |  |
+| amb_01 | 1 | number 27539; number 102.5; judge: literal reading with no assumptions: 68,057 lines / EUR 260M with no closed cycle, including consignment (never paid per line by design) and lines not yet due; no confirming question |  |
+| amb_01 | 2 | number 27539; number 102.5; judge: same as run 1 |  |
+| amb_01 | 3 | number 27539; number 102.5; judge: same as run 1 |  |
 | amb_02 | 1 | number 42.1; judge: answers order-to-payment cycle time (77 avg / 73 median) and labels it 'invoice to payment'; no assumptions stated |  |
 | amb_02 | 2 | number 42.1; judge: cycle time from first event, not invoice to payment; no assumptions or confirming question |  |
 | amb_02 | 3 | number 42.1; judge: cycle time mislabelled as 'from invoice clearance to payment'; no assumptions |  |

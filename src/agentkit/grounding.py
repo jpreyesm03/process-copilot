@@ -81,8 +81,8 @@ def collect_values(payload: Any) -> list[float]:
         elif isinstance(x, str):
             try:
                 found.append(float(x))
-            except ValueError:
-                pass
+            except ValueError:  # text from the data can carry numbers too ("vendorID_0104: 32.1M EUR")
+                found.extend(n.value for n in extract_numbers(x))
         elif isinstance(x, dict):
             for v in x.values():
                 walk(v)

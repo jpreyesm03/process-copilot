@@ -16,7 +16,7 @@ from __future__ import annotations
 import duckdb
 
 MIN_PEERS = 30  # below this many peers a comparison is too weak to report
-DATA_END_QUANTILE = 0.9999  # the extract ends where 99.99% of trusted events lie (drops a few stray far dates)
+DATA_END_MIN_EVENTS = 10  # the extract ends on the last day with 10+ events; later days hold 1-2 stray dates
 REWORK = ("Change Price", "Change Quantity", "Remove Payment Block", "Cancel Invoice Receipt", "Cancel Goods Receipt",
           "Change Approval for Purchase Order")
 
@@ -24,8 +24,9 @@ REWORK = ("Change Price", "Change Quantity", "Remove Payment Block", "Cancel Inv
 def build_metrics(con: duckdb.DuckDBPyConnection) -> None:
     con.execute(f"""
         CREATE OR REPLACE TABLE m_data_end AS
-        SELECT CAST(quantile_disc(ts, {DATA_END_QUANTILE}) AS DATE) AS data_end
-        FROM events WHERE ts_status IN ('ok', 'repaired')
+        SELECT max(day) AS data_end FROM (
+            SELECT CAST(ts AS DATE) AS day FROM events WHERE ts_status IN ('ok', 'repaired')
+            GROUP BY 1 HAVING count(*) >= {DATA_END_MIN_EVENTS})
     """)
 
     # waits inside first cycles that ended in a payment: comparable across lines (D4)

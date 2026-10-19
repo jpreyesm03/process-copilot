@@ -84,3 +84,8 @@ def test_parts_of_an_id_from_the_question_count_as_echoed():
     question = "Why did 4507000365_00010 take so long?"
     found = check("PO 4507000365, item 00010, took 42.5 days", RESULTS, question=question)
     assert "ungrounded" not in {n.status for n in found if n.text != "42.5"}
+
+
+def test_numbers_inside_text_results_are_grounded():
+    results = {"r1": {"rows": [["vendorID_0104: 32.1M EUR; vendorID_0159: 30.3M EUR"]]}}
+    assert {n.status for n in check("vendorID_0104 leads with 32.1M EUR", results)} == {"grounded"}

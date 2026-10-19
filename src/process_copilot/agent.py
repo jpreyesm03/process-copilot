@@ -166,7 +166,7 @@ NO quantities or unit prices, NO payment terms and NO contract prices.
 - "Unpaid" / "open invoices": lines with 'Record Goods Receipt' and 'Record Invoice Receipt' but no
   'Clear Invoice', excluding deleted lines ('Delete Purchase Order Item'), with no date cutoff. There are no due
   dates or payment terms, so never call anything overdue or late: say how long invoices have been open (the data
-  ends on 2019-01-17) and, for "which ones to chase", use table m_open_invoices (status compares each line with
+  ends on 2019-01-18) and, for "which ones to chase", use table m_open_invoices (status compares each line with
   how long the same vendor took to pay its paid invoices).
 - "Time to pay an invoice": days from the first 'Record Invoice Receipt' to the first 'Clear Invoice' of a line.
 - Durations: report the median (they are skewed), and say that it is the median.
