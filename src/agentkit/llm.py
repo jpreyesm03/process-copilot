@@ -38,7 +38,7 @@ class LLMResponse:
 
 class LLMClient:
     def __init__(self, provider: str | None = None, model: str | None = None,
-                 timeout_s: float = 60, max_retries: int = 4):
+                 timeout_s: float = 60, max_retries: int = 8):
         load_dotenv()
         self.provider = provider or os.getenv("LLM_PROVIDER", "groq")
         self.model = model or os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
@@ -48,6 +48,7 @@ class LLMClient:
             raise RuntimeError(f"Set {key_var} in .env to use provider '{self.provider}'.")
         self.http = httpx.Client(base_url=base_url, timeout=timeout_s, headers={"Authorization": f"Bearer {key}"})
         self.max_retries = max_retries
+        self.throttled_ms = 0  # time spent waiting on rate limits, kept apart from model latency
 
     def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None) -> LLMResponse:
         body: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0}
@@ -58,8 +59,9 @@ class LLMClient:
             resp = self.http.post("/chat/completions", json=body)
             # provider hiccups and rate limits: back off and retry (tool errors are NOT retried here)
             if resp.status_code in RETRY_STATUS and attempt < self.max_retries:
-                wait = float(resp.headers.get("retry-after", 2 ** attempt))
-                time.sleep(min(wait, 30))
+                wait = min(float(resp.headers.get("retry-after", 2 ** attempt)), 60)
+                time.sleep(wait)
+                self.throttled_ms += round(wait * 1000)
                 continue
             resp.raise_for_status()
             break

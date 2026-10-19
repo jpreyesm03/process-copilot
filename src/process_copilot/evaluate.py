@@ -58,34 +58,41 @@ def auto_grade(q: dict[str, Any], answer: str, tools_used: list[str], results: d
             "n_numbers": len(numbers), "n_derived": sum(n.status == "derived" for n in numbers)}
 
 
-def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROMPT_VERSION) -> Path:
+def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROMPT_VERSION,
+        resume: Path | None = None) -> Path:
     questions = load_golden(only)
     llm, tools = build_agent()
-    out_dir = RUNS / f"{datetime.now():%Y-%m-%d_%H%M}_{prompt}_{llm.model.split('/')[-1]}"
+    out_dir = resume or RUNS / f"{datetime.now():%Y-%m-%d_%H%M}_{prompt}_{llm.model.split('/')[-1]}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    rows = []
+    answers = out_dir / "answers.jsonl"
+    rows = [json.loads(line) for line in answers.read_text().splitlines()] if answers.exists() else []
+    done = {(r["id"], r["repeat"]) for r in rows}
+    (out_dir / "meta.json").write_text(json.dumps(
+        {"model": llm.model, "provider": llm.provider, "prompt_version": prompt, "repeats": repeats,
+         "questions": [q["id"] for q in questions], "started": out_dir.name}, indent=2))
     for q in questions:
         for i in range(1, repeats + 1):
+            if (q["id"], i) in done:
+                continue
+            throttled_before = llm.throttled_ms
             result = ask(q["question"], llm=llm, tools=tools, prompt_version=prompt)
             tools_used = [s["tool"] for s in result.steps]
+            throttled = llm.throttled_ms - throttled_before
             row = {
                 "id": q["id"], "type": q["type"], "repeat": i, "question": q["question"],
                 "answer": result.answer, "stop_reason": result.stop_reason, "tools": tools_used,
                 "steps": result.steps, "tokens": result.tokens_in + result.tokens_out,
-                "latency_ms": result.latency_ms, "run_id": result.run_id,
+                "latency_ms": result.latency_ms - throttled, "throttled_ms": throttled, "run_id": result.run_id,
                 "auto": auto_grade(q, result.answer, tools_used, result.store.results, result.stop_reason),
                 "needs_judge": needs_judge(q), "results": result.store.results,
             }
             rows.append(row)
+            with answers.open("a") as f:  # one line per answer, so a crash loses nothing (resume with --resume)
+                f.write(json.dumps(row, default=str) + "\n")
             print(f"{q['id']} #{i}: auto {'pass' if row['auto']['ok'] else 'FAIL'} · {row['latency_ms'] / 1000:.1f}s"
-                  f" · {row['tokens']} tok" + (" · needs judge" if row["needs_judge"] else ""), flush=True)
+                  f" (+{throttled / 1000:.0f}s throttled) · {row['tokens']} tok"
+                  + (" · needs judge" if row["needs_judge"] else ""), flush=True)
             time.sleep(pause_s)  # stay under the free tier's tokens-per-minute limit
-    with (out_dir / "answers.jsonl").open("w") as f:
-        for row in rows:
-            f.write(json.dumps(row, default=str) + "\n")
-    (out_dir / "meta.json").write_text(json.dumps(
-        {"model": llm.model, "provider": llm.provider, "prompt_version": prompt, "repeats": repeats,
-         "questions": [q["id"] for q in questions], "started": out_dir.name}, indent=2))
     write_judge_queue(out_dir, questions, rows)
     print(f"\nWrote {out_dir.relative_to(ROOT)}")
     return out_dir
@@ -154,7 +161,8 @@ def report(out_dir: Path) -> str:
         f"| **pass^{k}** (all {k} runs pass) | **{pct(pass_k, n_q)}** |",
         f"| pass@1 (single runs) | {pct(pass_1, len(rows))} |",
         f"| Ungrounded numbers | {pct(ungrounded, numbers)} of numbers stated |",
-        f"| Median latency | {lat[len(lat) // 2] / 1000:.1f} s (max {lat[-1] / 1000:.1f} s) |",
+        f"| Median latency | {lat[len(lat) // 2] / 1000:.1f} s (max {lat[-1] / 1000:.1f} s), "
+        f"excluding {sum(r.get('throttled_ms', 0) for r in rows) / 1000:.0f} s of rate-limit waits |",
         f"| Median tokens per question | {sorted(r['tokens'] for r in rows)[len(rows) // 2]:,} |",
         "", "| Type | pass^k | pass@1 |", "|---|---|---|",
     ]
@@ -187,11 +195,12 @@ def main() -> None:
     r.add_argument("--only", type=lambda s: s.split(","), default=None)
     r.add_argument("--pause", type=float, default=2.0, help="seconds between questions (rate limits)")
     r.add_argument("--prompt", default=PROMPT_VERSION, choices=sorted(SYSTEM_PROMPTS))
+    r.add_argument("--resume", type=Path, default=None, help="run folder to complete after a crash")
     rep = sub.add_parser("report")
     rep.add_argument("run_dir", type=Path)
     args = parser.parse_args()
     if args.cmd == "run":
-        out = run(args.repeats, args.only, args.pause, args.prompt)
+        out = run(args.repeats, args.only, args.pause, args.prompt, args.resume)
         print(report(out))
     else:
         print(report(args.run_dir))
