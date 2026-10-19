@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from agentkit import grounding
-from process_copilot.agent import PROMPT_VERSION, ROOT, ask, build_agent
+from process_copilot.agent import PROMPT_VERSION, ROOT, SYSTEM_PROMPTS, ask, build_agent
 
 GOLDEN = ROOT / "evals" / "golden_set.toml"
 RUNS = ROOT / "evals" / "runs"
@@ -58,15 +58,15 @@ def auto_grade(q: dict[str, Any], answer: str, tools_used: list[str], results: d
             "n_numbers": len(numbers), "n_derived": sum(n.status == "derived" for n in numbers)}
 
 
-def run(repeats: int, only: list[str] | None, pause_s: float) -> Path:
+def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROMPT_VERSION) -> Path:
     questions = load_golden(only)
     llm, tools = build_agent()
-    out_dir = RUNS / f"{datetime.now():%Y-%m-%d_%H%M}_{PROMPT_VERSION}_{llm.model.split('/')[-1]}"
+    out_dir = RUNS / f"{datetime.now():%Y-%m-%d_%H%M}_{prompt}_{llm.model.split('/')[-1]}"
     out_dir.mkdir(parents=True, exist_ok=True)
     rows = []
     for q in questions:
         for i in range(1, repeats + 1):
-            result = ask(q["question"], llm=llm, tools=tools)
+            result = ask(q["question"], llm=llm, tools=tools, prompt_version=prompt)
             tools_used = [s["tool"] for s in result.steps]
             row = {
                 "id": q["id"], "type": q["type"], "repeat": i, "question": q["question"],
@@ -84,7 +84,7 @@ def run(repeats: int, only: list[str] | None, pause_s: float) -> Path:
         for row in rows:
             f.write(json.dumps(row, default=str) + "\n")
     (out_dir / "meta.json").write_text(json.dumps(
-        {"model": llm.model, "provider": llm.provider, "prompt_version": PROMPT_VERSION, "repeats": repeats,
+        {"model": llm.model, "provider": llm.provider, "prompt_version": prompt, "repeats": repeats,
          "questions": [q["id"] for q in questions], "started": out_dir.name}, indent=2))
     write_judge_queue(out_dir, questions, rows)
     print(f"\nWrote {out_dir.relative_to(ROOT)}")
@@ -186,11 +186,12 @@ def main() -> None:
     r.add_argument("--repeats", type=int, default=3)
     r.add_argument("--only", type=lambda s: s.split(","), default=None)
     r.add_argument("--pause", type=float, default=2.0, help="seconds between questions (rate limits)")
+    r.add_argument("--prompt", default=PROMPT_VERSION, choices=sorted(SYSTEM_PROMPTS))
     rep = sub.add_parser("report")
     rep.add_argument("run_dir", type=Path)
     args = parser.parse_args()
     if args.cmd == "run":
-        out = run(args.repeats, args.only, args.pause)
+        out = run(args.repeats, args.only, args.pause, args.prompt)
         print(report(out))
     else:
         print(report(args.run_dir))
