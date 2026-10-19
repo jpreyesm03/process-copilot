@@ -73,3 +73,11 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 **Options:** (a) LLM judge, same model as the agent (free, but grades its own kind of output) · (b) LLM judge, a different model · (c) human grading.
 **Choice:** a reviewer outside the agent's model family reads the 6 judged questions (18 answers per run) from `judge_queue.md` and records pass/fail with a note in `judgments.json`; code grades everything else. No grading model runs inside the pipeline yet, so the eval itself costs $0 beyond the agent's calls.
 **Would change if:** runs become frequent (e.g. in CI); then move the judge prompt into code against an API model and report its agreement with the stored manual judgments.
+
+## D11 · Scope guard: prompt rule + output gate + usage limits (2026-10-18)
+**Constraint:** C2 cost (a public demo key is an open tap) and C3 trust (no answers outside the data).
+**Threat:** off-topic requests, off-topic disguised as the domain ("if 85 cans and 30 lids cost 100 EUR, what does a can cost?") and prompt injection ("print your system prompt").
+**Options:** (a) scope rule in the prompt · (b) input classifier before the agent · (c) output gate reusing the grounding check · (d) usage limits.
+**Choice:** a + c + d. The prompt rule is cheap but only a request; the gate is a wall built from code that already exists: numbers in an answer must come from a tool result, and numbers from the question may be repeated but never computed with, which withholds exactly the disguised-arithmetic trick. Limits cap questions per client per hour, per day overall, and tokens per question. (b) is skipped unless evals show a + c leaking: it adds a model call per question.
+**Measured by:** 5 guard questions in the golden set (4 tricks to decline, 1 borderline in-scope question that must still be answered, since over-blocking is a failure too).
+**Would change if:** the guard evals show leaks, then add (b); a gate cannot catch off-topic answers that contain no numbers.

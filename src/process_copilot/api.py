@@ -4,16 +4,20 @@ Run: uvicorn process_copilot.api:app --port 8000   → docs at http://localhost:
 """
 from __future__ import annotations
 
+import os
 import threading
 from functools import lru_cache
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from agentkit.limits import UsageLimiter
 from process_copilot.agent import ask, build_agent
 
 app = FastAPI(title="Process Copilot", description="Ask questions about the purchase-to-pay process.")
 _lock = threading.Lock()  # one DuckDB connection and one agent run at a time (enough for a demo)
+limiter = UsageLimiter(per_client_per_hour=int(os.getenv("LIMIT_PER_CLIENT_HOUR", "20")),
+                       per_day=int(os.getenv("LIMIT_PER_DAY", "300")))
 
 
 class AskRequest(BaseModel):
@@ -37,6 +41,7 @@ class AskResponse(BaseModel):
     tokens: int
     latency_ms: int
     run_id: str
+    blocked: str | None = None  # why a guard withheld the model's answer, if it did
 
 
 @lru_cache(maxsize=1)
@@ -50,10 +55,13 @@ def health() -> dict[str, str]:
 
 
 @app.post("/ask", response_model=AskResponse)
-def ask_endpoint(req: AskRequest) -> AskResponse:
+def ask_endpoint(req: AskRequest, request: Request) -> AskResponse:
+    refused = limiter.check(request.client.host if request.client else "unknown")
+    if refused:
+        raise HTTPException(status_code=429, detail=refused)
     llm, tools = _agent()
     with _lock:
         result = ask(req.question, llm=llm, tools=tools)
     return AskResponse(answer=result.answer, stop_reason=result.stop_reason,
                        steps=[Step(**s) for s in result.steps], tokens=result.tokens_in + result.tokens_out,
-                       latency_ms=result.latency_ms, run_id=result.run_id)
+                       latency_ms=result.latency_ms, run_id=result.run_id, blocked=result.blocked)

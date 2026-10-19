@@ -11,19 +11,21 @@ from agentkit.tools import ResultStore, Tool, call_tool
 from agentkit.trace import Tracer
 
 MAX_STEPS = 10
+MAX_RUN_TOKENS = 30_000  # cost cap per question (C2): about 10x a normal run
 MAX_RESULT_CHARS = 8000  # one tool result in the model's context (C2 cost)
 
 
 @dataclass
 class AgentResult:
     answer: str | None
-    stop_reason: str  # answered | max_steps | loop_detected
+    stop_reason: str  # answered | max_steps | loop_detected | token_budget
     run_id: str
     steps: list[dict[str, Any]] = field(default_factory=list)  # the trajectory: what the agent did, in order
     tokens_in: int = 0
     tokens_out: int = 0
     latency_ms: int = 0
     store: ResultStore = field(default_factory=ResultStore)
+    blocked: str | None = None  # set when a guard withheld the answer (the model's text stays in the trace)
 
 
 def _compact(result: dict[str, Any]) -> str:
@@ -34,7 +36,8 @@ def _compact(result: dict[str, Any]) -> str:
 
 
 def run_agent(question: str, *, llm, tools: dict[str, Tool], system_prompt: str, tracer: Tracer | None = None,
-              prompt_version: str = "v1", max_steps: int = MAX_STEPS) -> AgentResult:
+              prompt_version: str = "v1", max_steps: int = MAX_STEPS,
+              max_tokens: int = MAX_RUN_TOKENS) -> AgentResult:
     tracer = tracer or Tracer(None)
     run_id = tracer.new_run()
     started_at, t0 = datetime.now(), time.perf_counter()
@@ -54,6 +57,9 @@ def run_agent(question: str, *, llm, tools: dict[str, Tool], system_prompt: str,
 
         if not resp.tool_calls:  # the model decided it has enough to answer
             out.answer, out.stop_reason = resp.content, "answered"
+            break
+        if out.tokens_in + out.tokens_out >= max_tokens:  # still working but over budget: stop paying
+            out.stop_reason = "token_budget"
             break
 
         messages.append(resp.raw_message)

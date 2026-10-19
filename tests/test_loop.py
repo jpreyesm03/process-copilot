@@ -78,3 +78,11 @@ def test_run_is_traced(tools, tmp_path):
     assert con.execute("SELECT stop_reason, n_steps FROM runs").fetchall() == [("answered", 1)]
     kinds = [r[0] for r in con.execute("SELECT kind FROM steps ORDER BY step, kind").fetchall()]
     assert kinds == ["llm", "tool", "llm"]
+
+
+def test_token_budget_stops_an_expensive_run(tools):
+    expensive = call("run_sql", query="SELECT count(*) FROM cases")
+    expensive.tokens_in = 40_000
+    llm = ScriptedLLM([expensive, LLMResponse(content="never reached")])
+    out = run_agent("How many lines?", llm=llm, tools=tools, system_prompt="sys")
+    assert out.stop_reason == "token_budget" and out.answer is None and out.steps == []

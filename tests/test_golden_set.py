@@ -14,8 +14,8 @@ QUESTIONS = tomllib.loads(GOLDEN.read_text())["q"]
 
 def test_golden_set_shape():
     dev = [q for q in QUESTIONS if q.get("split", "dev") == "dev"]
-    assert len(dev) == 20 and len(QUESTIONS) == 24
-    assert len({q["id"] for q in QUESTIONS}) == 24
+    assert len(dev) == 20 and len(QUESTIONS) == 29
+    assert len({q["id"] for q in QUESTIONS}) == 29
     assert Counter(q["type"] for q in dev) == {
         "descriptive": 3, "time": 3, "cycles": 3, "case": 4, "vendors": 3, "unanswerable": 2, "ambiguous": 2,
     }

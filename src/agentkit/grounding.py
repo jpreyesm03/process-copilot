@@ -2,7 +2,7 @@
 
 A number is
   grounded    if it matches a value in some tool result (after rounding, or in thousands/millions/%),
-  derived     if it matches the difference or ratio of two result values (e.g. "+34 days" = 40.0 - 6.3),
+  derived     if it matches the sum, difference or ratio of two result values (e.g. "+34 days" = 40.0 - 6.3),
   ungrounded  otherwise: the model wrote a number no tool gave it.
 
 Matching is deliberately lenient (half a unit of the last digit shown, or 0.5%, across thousands/millions/percent),
@@ -105,14 +105,16 @@ def _matches(stated: Number, candidate: float) -> bool:
 
 
 def check(answer: str, results: dict[str, Any], question: str = "") -> list[Number]:
-    """Classify every number in the answer against all tool results of the run (and the question's own numbers)."""
-    pool = sorted(set(collect_values(results)) | {n.value for n in extract_numbers(question)})
+    """Classify every number in the answer against all tool results of the run. Numbers from the question may be
+    repeated (grounded) but not computed with: arithmetic on user-supplied numbers is not an answer from the data."""
+    pool = sorted(set(collect_values(results)))
+    echoed = [n.value for n in extract_numbers(question)]
     numbers = extract_numbers(answer or "")
     for n in numbers:
-        if any(_matches(n, v) for v in pool):
+        if any(_matches(n, v) for v in pool + echoed):
             n.status = "grounded"
         elif len(pool) <= MAX_PAIRS_POOL and any(
-            _matches(n, abs(a - b)) or (b and _matches(n, a / b)) or (a and _matches(n, b / a))
+            _matches(n, abs(a - b)) or _matches(n, a + b) or (b and _matches(n, a / b)) or (a and _matches(n, b / a))
             for a, b in combinations(pool, 2)
         ):
             n.status = "derived"
