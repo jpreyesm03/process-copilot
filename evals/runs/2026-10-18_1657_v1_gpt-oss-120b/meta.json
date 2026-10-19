@@ -1,0 +1,29 @@
+{
+  "model": "openai/gpt-oss-120b",
+  "provider": "groq",
+  "prompt_version": "v1",
+  "repeats": 3,
+  "questions": [
+    "desc_01",
+    "desc_02",
+    "desc_03",
+    "time_01",
+    "time_02",
+    "time_03",
+    "cyc_01",
+    "cyc_02",
+    "cyc_03",
+    "case_01",
+    "case_02",
+    "case_03",
+    "case_04",
+    "vend_01",
+    "vend_02",
+    "vend_03",
+    "unans_01",
+    "unans_02",
+    "amb_01",
+    "amb_02"
+  ],
+  "started": "2026-10-18_1657_v1_gpt-oss-120b"
+}
