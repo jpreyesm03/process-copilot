@@ -92,7 +92,7 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 ## D9 revised · "Unpaid" has no due-date cutoff: nothing is called overdue (2026-10-18)
 **Evidence:** the data has no due dates or payment terms ('Change payment term' occurs 7 times, with no term value). The first D9 reading treated lines created before Oct 2018 as due (4,302 lines / €16.3M), but €15.8M of that had the invoice recorded in Oct 2018 or later, weeks before the data ends (17 Jan 2019): most of it was probably not overdue. The headline shrank about 30× once "due" was checked.
 **Options:** (a) keep the creation-date cutoff · (b) invoice date + an assumed payment term · (c) age breakdown only · (d) compare with the vendor's own paid invoices.
-**Choice (JP):** no assumptions where the data has none, so (c) + (d). Unpaid = goods and invoice received, not paid, not deleted, with no date cutoff; report days open since the invoice was recorded and flag lines open longer than 90% of the same vendor's paid invoices (vendors with fewer than 30 paid invoices are reported as "too few to compare").
+**Choice:** no assumptions where the data has none, so (c) + (d). Unpaid = goods and invoice received, not paid, not deleted, with no date cutoff; report days open since the invoice was recorded and flag lines open longer than 90% of the same vendor's paid invoices (vendors with fewer than 30 paid invoices are reported as "too few to compare").
 **Result:** 27,539 open lines / €102.5M; 828 / €1.02M open longer than the vendor usually takes (data end = last day with 10+ events, 18 Jan 2019); €15.8M with vendors too rarely paid to have a baseline (a manual-review list).
 
 ## D13 · Process metrics are tables built with the warehouse (2026-10-18)
@@ -103,13 +103,13 @@ The original value is always kept in `ts_original`, and `ts_status` says which r
 ## D11 revised · The output gate flags unverified numbers instead of hiding the answer (2026-10-18)
 **Evidence:** across the Haiku runs with prompts v2/v3 the gate withheld 7 answers and only 1 was a real error (a mis-added total); the other 6 were correct answers that mentioned an example number ("e.g. net 30", "such as 90") or an id. Prompt v2/v3 already declines the out-of-scope tricks (guard 5/5) before the gate is needed.
 **Options:** (a) keep withholding · (b) remove only the unverified number · (c) show the answer and mark each unverified number with a warning.
-**Choice (JP):** (c): most transparent; the user sees everything and knows which numbers did not come from the data. Cost: a determined user who gets the model to do out-of-scope arithmetic still sees it, marked [unverified] (prompt v1 did, 3 of 3 runs).
+**Choice:** (c): most transparent; the user sees everything and knows which numbers did not come from the data. Cost: a determined user who gets the model to do out-of-scope arithmetic still sees it, marked [unverified] (prompt v1 did, 3 of 3 runs).
 **Would change if:** the demo is public and guard evals show the scope rule leaking, then move to (b) or add an input classifier.
 
 ## D14 · A topic gate screens every question before the main model (2026-10-18)
 **Constraint:** C2 cost and the public demo's shared daily quota: only purchase-to-pay questions should reach the main model.
 **Evidence:** the scope rule in the prompt is a request, not a wall (prompt v1 wrote the poem and did the burger arithmetic in all 3 runs), and the output gate only marks numbers (D11 revised). The live model (gpt-oss-120b on Groq) was never evaluated on the guard questions.
 **Options:** (a) rely on the prompt and measure first · (b) a small classifier before the agent.
-**Choice (JP):** (b). `openai/gpt-oss-20b` on Groq with a one-word ALLOW/BLOCK policy: about 360 tokens and under a second per question, on its own quota (~550 checks a day free). It fails closed (no decision = no main-model call). In the app the gate has its own limits (30 per visitor per hour, 500 per day) and only in-scope questions count against the main model's 25 a day. `gpt-oss-safeguard-20b` was tried first but allows 3 requests per minute on the free tier.
+**Choice:** (b). `openai/gpt-oss-20b` on Groq with a one-word ALLOW/BLOCK policy: about 360 tokens and under a second per question, on its own quota (~550 checks a day free). It fails closed (no decision = no main-model call). In the app the gate has its own limits (30 per visitor per hour, 500 per day) and only in-scope questions count against the main model's 25 a day. `gpt-oss-safeguard-20b` was tried first but allows 3 requests per minute on the free tier.
 **Measured:** see `evals/topic_gate.md` (in scope must pass, including unanswerable and vague questions; off-topic must be blocked, including arithmetic dressed in the domain's words and jailbreaks).
 **Would change if:** the gate starts blocking real questions (log and review blocked questions), or the main model moves to a paid key with its own budget cap.

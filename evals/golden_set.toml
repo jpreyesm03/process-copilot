@@ -98,7 +98,7 @@ key_sql = "SELECT case_id, count(*) FROM cycles GROUP BY 1 ORDER BY 2 DESC LIMIT
 numbers = [54]
 mentions = ["4507000440_00010"]
 
-# ---------- single line: why slow (labelled by JP, 2026-10-18) ----------
+# ---------- single line: why slow (labelled by hand from the timelines and peer benchmarks, 2026-10-18) ----------
 # numbers = the main waits in days; bonus_numbers = peer medians (only gradable once the tool benchmarks);
 # judge = rules for the LLM judge; label = the full reference answer.
 
