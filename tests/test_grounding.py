@@ -68,3 +68,9 @@ def test_ratio_of_two_results_is_derived():
     # 40.0 / 6.3 = 6.35 and 6.3 / 40.0 = 0.16
     assert status("40.0 vs 6.3 days: 6.35 times, 0.16") == {
         "40.0": "grounded", "6.3": "grounded", "6.35": "derived", "0.16": "derived"}
+
+
+def test_column_total_is_grounded_but_a_wrong_sum_is_not():
+    results = {"r1": {"columns": ["type", "n"], "rows": [["A", 248755], ["B", 1539], ["C", 1440]]}}
+    found = {n.text: n.status for n in check("Total 251,734 lines; earlier I said 250,734", results)}
+    assert found == {"251,734": "grounded", "250,734": "ungrounded"}

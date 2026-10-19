@@ -5,8 +5,9 @@ A number is
   derived     if it matches the sum, difference or ratio of two result values (e.g. "+34 days" = 40.0 - 6.3),
   ungrounded  otherwise: the model wrote a number no tool gave it.
 
-Matching is deliberately lenient (half a unit of the last digit shown, or 0.5%, across thousands/millions/percent),
-so a wrong number can occasionally pass as grounded, but a correct one is not failed.
+A number matches when it equals a value at the precision it is written with ("16.3M" matches 16,301,234), across
+thousands/millions/percent. Column totals of a result count as grounded. Computed (derived) numbers get no extra
+slack: "250,734" written for a true total of 251,734 is ungrounded.
 """
 
 from __future__ import annotations
@@ -89,7 +90,26 @@ def collect_values(payload: Any) -> list[float]:
                 walk(v)
 
     walk(payload)
+    found += _column_totals(payload)
     return found
+
+
+def _column_totals(payload: Any) -> list[float]:
+    """Sum of each numeric column of every result table: a total of rows the tool returned is grounded."""
+    totals: list[float] = []
+    if isinstance(payload, dict):
+        rows = payload.get("rows")
+        if isinstance(rows, list) and rows and all(isinstance(r, list | tuple) for r in rows):
+            for col in zip(*rows, strict=False):
+                nums = [v for v in col if isinstance(v, int | float) and not isinstance(v, bool)]
+                if len(nums) > 1:
+                    totals.append(float(sum(nums)))
+        for v in payload.values():
+            totals += _column_totals(v)
+    elif isinstance(payload, list):
+        for v in payload:
+            totals += _column_totals(v)
+    return totals
 
 
 def _decimals(text: str) -> int:
@@ -97,11 +117,11 @@ def _decimals(text: str) -> int:
     return len(m.group(1)) if m else 0
 
 
-def _matches(stated: Number, candidate: float) -> bool:
-    """True if the stated number is the candidate as written: rounded to the digits shown (or within 0.5%),
-    possibly as a percentage of a share (65.3% for 0.653) or in thousands/millions without a unit word."""
+def _matches(stated: Number, candidate: float, slack: float = 0.001) -> bool:
+    """True if the stated number is the candidate as written: rounded to the digits shown (plus a relative
+    `slack` for float noise), possibly as a percentage of a share (65.3% for 0.653) or in thousands/millions."""
     variants = (candidate, candidate * 100, candidate / 1e3, candidate / 1e6, candidate / 1e9)
-    return any(abs(stated.value - c) <= max(stated.tol, 0.005 * abs(c)) for c in variants if c)
+    return any(abs(stated.value - c) <= max(stated.tol, slack * abs(c)) for c in variants if c)
 
 
 def check(answer: str, results: dict[str, Any], question: str = "") -> list[Number]:
@@ -113,8 +133,9 @@ def check(answer: str, results: dict[str, Any], question: str = "") -> list[Numb
     for n in numbers:
         if any(_matches(n, v) for v in pool + echoed):
             n.status = "grounded"
-        elif len(pool) <= MAX_PAIRS_POOL and any(
-            _matches(n, abs(a - b)) or _matches(n, a + b) or (b and _matches(n, a / b)) or (a and _matches(n, b / a))
+        elif len(pool) <= MAX_PAIRS_POOL and any(  # computed numbers must match exactly at the precision shown
+            _matches(n, abs(a - b), 0) or _matches(n, a + b, 0)
+            or (b and _matches(n, a / b, 0)) or (a and _matches(n, b / a, 0))
             for a, b in combinations(pool, 2)
         ):
             n.status = "derived"

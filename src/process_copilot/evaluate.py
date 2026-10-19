@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any
 
 from agentkit import grounding
-from process_copilot.agent import PROMPT_VERSION, ROOT, SYSTEM_PROMPTS, ask, build_agent
+from agentkit.guard import ungrounded_numbers
+from process_copilot.agent import BLOCKED_ANSWER, PROMPT_VERSION, ROOT, SYSTEM_PROMPTS, ask, build_agent
 from process_copilot.tools import TIMELINE_VERSION
 
 GOLDEN = ROOT / "evals" / "golden_set.toml"
@@ -83,7 +84,8 @@ def run(repeats: int, only: list[str] | None, pause_s: float, prompt: str = PROM
             throttled = llm.throttled_ms - throttled_before
             row = {
                 "id": q["id"], "type": q["type"], "repeat": i, "question": q["question"],
-                "answer": result.answer, "stop_reason": result.stop_reason, "tools": tools_used,
+                "answer": result.answer, "raw_answer": result.raw_answer, "stop_reason": result.stop_reason,
+                "tools": tools_used,
                 "steps": result.steps, "tokens": result.tokens_in + result.tokens_out,
                 "latency_ms": result.latency_ms - throttled, "throttled_ms": throttled, "run_id": result.run_id,
                 "cost_usd": result.cost_usd,
@@ -135,6 +137,10 @@ def report(out_dir: Path) -> str:
     for r in rows:
         r["key"] = f"{r['id']}#{r['repeat']}"
         if "results" in r and r["id"] in golden:  # re-grade stored answers, so grader fixes need no new agent runs
+            if r.get("raw_answer") is not None:  # re-apply the current output gate to the model's own answer
+                bad = ungrounded_numbers(r["raw_answer"], r["results"], r["question"])
+                r["answer"] = BLOCKED_ANSWER if bad else r["raw_answer"]
+                r["blocked"] = f"ungrounded numbers: {', '.join(bad)}" if bad else None
             r["auto"] = auto_grade(golden[r["id"]], r["answer"], r["tools"], r["results"], r["stop_reason"])
     missing = [r["key"] for r in rows if r["needs_judge"] and r["key"] not in judgments]
     for r in rows:

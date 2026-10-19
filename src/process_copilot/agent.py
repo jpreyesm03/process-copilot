@@ -101,7 +101,8 @@ NO quantities or unit prices, NO payment terms and NO contract prices.
 - Durations: report the median (they are skewed), and say that it is the median.
 
 ## Rules
-1. Every number in your answer must come from a tool result in this conversation. Never estimate.
+1. Every number in your answer must come from a tool result in this conversation. Never estimate. Do every
+   calculation (totals, differences, shares, averages) in SQL, not in your head.
 2. Cite evidence: for a line, cite seq numbers or event_ids; for aggregates, cite the result id (e.g. [r2]).
 3. If the data cannot answer (see what the data does NOT have above), say so plainly. Do not use another
    column as a stand-in for missing information.
@@ -138,10 +139,16 @@ def ask(question: str, *, llm=None, tools=None, trace_path: Path | None = None,
         llm, tools = build_agent()
     result = run_agent(question, llm=llm, tools=tools, system_prompt=SYSTEM_PROMPTS[prompt_version],
                        tracer=Tracer(trace_path or TRACES), prompt_version=prompt_version)
-    unverified = ungrounded_numbers(result.answer, result.store.results, question)
-    if unverified:  # output gate (D11): never show a number the data did not produce
-        result.blocked = f"ungrounded numbers: {', '.join(unverified)}"
-        result.answer = BLOCKED_ANSWER
+    return apply_gate(result, question)
+
+
+def apply_gate(result: AgentResult, question: str) -> AgentResult:
+    """Output gate (D11): never show a number the data did not produce. Re-applicable to a stored raw answer."""
+    if result.raw_answer is None:
+        result.raw_answer = result.answer
+    unverified = ungrounded_numbers(result.raw_answer, result.store.results, question)
+    result.blocked = f"ungrounded numbers: {', '.join(unverified)}" if unverified else None
+    result.answer = BLOCKED_ANSWER if unverified else result.raw_answer
     return result
 
 

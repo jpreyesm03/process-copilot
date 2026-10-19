@@ -1,6 +1,6 @@
 # Eval run 2026-10-18_1657_v1_gpt-oss-120b
 
-Model `openai/gpt-oss-120b` (groq) · prompt v1 · 20 questions × 3 runs
+Model `openai/gpt-oss-120b` (groq) · prompt v1 · timeline v1 · 20 questions × 3 runs
 
 | Metric | Value |
 |---|---|

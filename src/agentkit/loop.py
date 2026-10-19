@@ -26,6 +26,7 @@ class AgentResult:
     latency_ms: int = 0
     store: ResultStore = field(default_factory=ResultStore)
     cost_usd: float = 0.0
+    raw_answer: str | None = None  # the model's answer before any guard (kept for re-grading and traces)
     blocked: str | None = None  # set when a guard withheld the answer (the model's text stays in the trace)
 
 
