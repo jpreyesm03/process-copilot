@@ -230,5 +230,5 @@ pg = st.navigation([
     st.Page(explorer, title="Line explorer", icon="🔎"),
     st.Page(quality, title="How we know it works", icon="✅"),
 ])
-st.sidebar.caption("Data: BPI Challenge 2019 event log (4TU.ResearchData). Built by JP Reyes.")
+st.sidebar.caption("Data: van Dongen, B. (2019) BPI Challenge 2019, 4TU.ResearchData, CC BY 4.0. Built by JP Reyes.")
 pg.run()
