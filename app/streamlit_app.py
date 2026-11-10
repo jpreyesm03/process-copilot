@@ -176,13 +176,16 @@ def _answer(question: str) -> tuple[str, str, list | None, object]:
     recorded = next((r for r in RECORDED if r["question"] == question), None)
     error = None
     if recorded is None:  # sample questions skip the topic check: they are known to be in scope
-        topic, topic_limiter = gate()
-        error = topic_limiter.check(st.session_state.sid)
-        if not error:
-            verdict = topic.check(question)
-            if verdict.allowed is not True:
-                note = "" if verdict.allowed is False else " (The topic check is unavailable right now.)"
-                return "blocked", OUT_OF_SCOPE_ANSWER + note, None, ""
+        try:
+            topic, topic_limiter = gate()
+            error = topic_limiter.check(st.session_state.sid)
+            if not error:
+                verdict = topic.check(question)
+                if verdict.allowed is not True:
+                    note = "" if verdict.allowed is False else " (The topic check is unavailable right now.)"
+                    return "blocked", OUT_OF_SCOPE_ANSWER + note, None, ""
+        except Exception as exc:  # missing key or provider down: never show a stack trace to a visitor
+            error = f"The live model is unavailable right now ({type(exc).__name__})."
     error = error or limiter.check(st.session_state.sid)
     if not error:
         try:
