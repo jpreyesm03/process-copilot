@@ -1,5 +1,9 @@
 # Process Copilot
 
+> **Original version.** This project continues in **P2P Autopilot**, which adds predictive process monitoring
+> (which open items will be paid before the goods arrive) and an agent that acts on supplier portals with no API.
+> This repo stays as the first, self-contained version.
+
 **Ask a purchase-to-pay process questions in plain English and get answers with evidence, plus the process metrics a value engineer would present.** Built on the BPI Challenge 2019 SAP event log: 1.6M events, 251,734 purchase-order lines from a multinational coatings company.
 
 **Live demo: [process-copilot.streamlit.app](https://process-copilot.streamlit.app/)**
