@@ -4,7 +4,7 @@
 # Restore:  git clone process-copilot.bundle process-copilot && cd process-copilot && uv sync
 set -euo pipefail
 cd "$(dirname "$0")/.."
-DEST="${P2_BACKUP_DIR:-$HOME/Library/CloudStorage/OneDrive-UW/JP/FDE_Consulting/proyectos/p2_process_copilot}"
+DEST="${P2_BACKUP_DIR:-$HOME/Library/CloudStorage/OneDrive-UW/JP/FDE_Consulting/proyectos/archive/p2_process_copilot_original}"
 [ -d "$(dirname "$DEST")" ] || { echo "backup: OneDrive folder not found, skipped"; exit 0; }
 mkdir -p "$DEST/snapshot"
 
